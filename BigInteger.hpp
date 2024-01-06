@@ -83,7 +83,7 @@ namespace TwilightDream::BigInteger
 	
 	    constexpr Float64 HINT_PI = 3.141592653589793238462643;
 	    constexpr Float64 HINT_2PI = HINT_PI * 2;
-	    constexpr size_t FHT_MAX_LEN = size_t(1) << 18;
+	    constexpr size_t FHT_MAX_LEN = size_t(1) << 18; // The max length of FHT to avoid the overflow of float64
 	
 	    template <typename T>
 	    constexpr T int_floor2(T n)
@@ -108,7 +108,7 @@ namespace TwilightDream::BigInteger
 	        return n + 1;
 	    }
 	
-	    //求整数的对数
+	    //log2(n) of integer
 	    template <typename T>
 	    constexpr int hint_log2(T n)
 	    {
@@ -129,7 +129,7 @@ namespace TwilightDream::BigInteger
 	        return l;
 	    }
 	
-	    // fft与类fft变换的命名空间
+	    // namespace of fft and fft like algorithm
 	    namespace hint_transform
 	    {
 	        template <typename T>
@@ -139,7 +139,7 @@ namespace TwilightDream::BigInteger
 	            sum = temp0 + temp1;
 	            diff = temp0 - temp1;
 	        }
-	        // 返回单位圆上辐角为theta的点
+	        // Point of unit circle
 	        template <typename FloatTy>
 	        inline auto unit_root(FloatTy theta)
 	        {
@@ -147,6 +147,7 @@ namespace TwilightDream::BigInteger
 	        }
 	        namespace hint_fht
 	        {
+				// Look up table of unit roots
 	            template <typename FloatTy>
 	            class DynamicTable
 	            {
@@ -189,6 +190,13 @@ namespace TwilightDream::BigInteger
 	            private:
 	                CompVec table;
 	            };
+				
+				// The Fast Hartley Transform
+				// Reference:
+				// [1] J¨org Arndt.Matters Computational[M].Heidelberg:Springer Berlin,2011:515-533.  https://doi.org/10.1007/978-3-642-14764-7 https://www.jjj.de/fxt/fxtbook.pdf
+				// [2] Vlodymyr Myrnyy.A Simple and Efficient FFT Implementation in C++[J/OL].EETimes,2007. https://www.eetimes.com/a-simple-and-efficient-fft-implementation-in-c-part-i/ 
+				// [3] RRRR_wys.离散哈特莱变换(DHT)及快速哈特莱变换(FHT)学习.博客园.2018. https://www.cnblogs.com/RRRR-wys/p/10090007.html
+				// template class of FHT, using template recursion to speed up code
 	            template <size_t LEN, typename FloatTy>
 	            struct FHT
 	            {
@@ -202,6 +210,7 @@ namespace TwilightDream::BigInteger
 	                using HalfFHT = FHT<half_len, FloatTy>;
 	                static DynamicTable<FloatTy> TABLE;
 	                template <typename FloatIt>
+					// Decimation in time FHT
 	                static void dit(FloatIt in_out)
 	                {
 	                    static_assert(std::is_same<typename std::iterator_traits<FloatIt>::value_type, FloatTy>::value, "Must be same as the FHT template float type");
@@ -227,6 +236,7 @@ namespace TwilightDream::BigInteger
 	                        it3[0] = temp1 - temp3;
 	                    }
 	                }
+					// Decimation in frequency FHT
 	                template <typename FloatIt>
 	                static void dif(FloatIt in_out)
 	                {
@@ -256,7 +266,8 @@ namespace TwilightDream::BigInteger
 	            };
 	            template <size_t LEN, typename FloatTy>
 	            DynamicTable<FloatTy> FHT<LEN, FloatTy>::TABLE(FHT<LEN, FloatTy>::log_len, 1, true);
-	
+
+				// Template specialization of short FHTs
 	            template <typename FloatTy>
 	            struct FHT<0, FloatTy>
 	            {
@@ -379,7 +390,7 @@ namespace TwilightDream::BigInteger
 	                }
 	            };
 	
-	            // 辅助选择函数
+	            // Function to help choose the correct template FHT dit function
 	            template <size_t LEN = 1>
 	            void fht_dit_template_alt(Float64 *input, size_t fht_len)
 	            {
@@ -393,7 +404,7 @@ namespace TwilightDream::BigInteger
 	            template <>
 	            void fht_dit_template_alt<0>(Float64 *input, size_t fht_len) {}
 	
-	            // 辅助选择函数
+	             // Function to help choose the correct template FHT dif function
 	            template <size_t LEN = 1>
 	            void fht_dif_template_alt(Float64 *input, size_t fht_len)
 	            {
@@ -410,7 +421,7 @@ namespace TwilightDream::BigInteger
 	            auto fht_dit = fht_dit_template_alt<FHT_MAX_LEN>;
 	            auto fht_dif = fht_dif_template_alt<FHT_MAX_LEN>;
 	
-	            // FHT加速卷积
+	            // Use FHT to accelerate convolution of float64 array
 	            void fht_convolution(Float64 fht_ary1[], Float64 fht_ary2[], Float64 out[], size_t fht_len)
 	            {
 	                if (fht_len == 0)
@@ -428,7 +439,7 @@ namespace TwilightDream::BigInteger
 	                    throw("FHT len cannot be larger than FHT_MAX_LEN");
 	                }
 	                fht_dif(fht_ary1, fht_len);
-	                // 两个输入相同时只进行一次计算，提升平方速度
+	                // When the two float arrays are actually same, execute DIF only once
 	                if (fht_ary1 != fht_ary2)
 	                {
 	                    fht_dif(fht_ary2, fht_len);
@@ -440,7 +451,7 @@ namespace TwilightDream::BigInteger
 	                {
 	                    return;
 	                }
-	                // DHT的卷积定理
+	                // Theory of convolution using FHT
 	                auto temp0 = fht_ary1[2], temp1 = fht_ary1[3];
 	                auto temp2 = fht_ary2[2], temp3 = fht_ary2[3];
 	                transform_2point(temp0, temp1);
@@ -483,7 +494,7 @@ namespace TwilightDream::BigInteger
 			std::copy( in1_16, in1_16 + in1_len16, buffer1.data() );
 			std::copy( in2_16, in2_16 + in2_len16, buffer2.data() );
 
-			hint_transform::hint_fht::fht_convolution( buffer1.data(), buffer2.data(), buffer1.data(), fht_len );  // 卷积
+			hint_transform::hint_fht::fht_convolution( buffer1.data(), buffer2.data(), buffer1.data(), fht_len );  // FHT convolution
 
 			uint64_t carry = 0;
 			for ( size_t i = 0; i < conv_len; i++ )
