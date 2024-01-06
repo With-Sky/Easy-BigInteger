@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <vector>
 #include <thread>
+#include <complex>
+#include <type_traits>
 #include <cstdint>
 #include <intrin.h>
 #include <immintrin.h>
@@ -39,6 +41,7 @@ namespace TwilightDream::BigInteger
 	const uint64_t BASE = digit_type(pow(2, EXPONENT));
 	
 	constexpr int	   KARATSUBA_LIMIT = 70;
+	constexpr int      FHT_LIMIT = 75;
 	constexpr int	   BINARY_SEARCH_DIVISION_LIMIT = 4;
 	constexpr int	   DONALD_KNUTH_LONG_DIVISION_LIMIT = 20;
 	constexpr int	   MULTI_THREAD_LIMIT = 10000;
@@ -70,6 +73,463 @@ namespace TwilightDream::BigInteger
 		(size <= STACK_LIMIT													\
 		? MarkAlloct((void*)(((uint64_t)_alloca(size + 63) + 31) & ~31), 0)		\
 		: MarkAlloct(_aligned_malloc(size + 32, 32), 1))
+
+	namespace hint
+	{
+	    using Float32 = float;
+	    using Float64 = double;
+	    using Complex32 = std::complex<Float32>;
+	    using Complex64 = std::complex<Float64>;
+	
+	    constexpr Float64 HINT_PI = 3.141592653589793238462643;
+	    constexpr Float64 HINT_2PI = HINT_PI * 2;
+	    constexpr size_t FHT_MAX_LEN = size_t(1) << 18; // The max length of FHT to avoid the overflow of float64
+	
+	    template <typename T>
+	    constexpr T int_floor2(T n)
+	    {
+	        constexpr int bits = sizeof(n) * 8;
+	        for (int i = 1; i < bits; i *= 2)
+	        {
+	            n |= (n >> i);
+	        }
+	        return (n >> 1) + 1;
+	    }
+	
+	    template <typename T>
+	    constexpr T int_ceil2(T n)
+	    {
+	        constexpr int bits = sizeof(n) * 8;
+	        n--;
+	        for (int i = 1; i < bits; i *= 2)
+	        {
+	            n |= (n >> i);
+	        }
+	        return n + 1;
+	    }
+	
+	    //log2(n) of integer
+	    template <typename T>
+	    constexpr int hint_log2(T n)
+	    {
+	        constexpr int bits = sizeof(n) * 8;
+	        int l = -1, r = bits;
+	        while ((l + 1) != r)
+	        {
+	            int mid = (l + r) / 2;
+	            if ((T(1) << mid) > n)
+	            {
+	                r = mid;
+	            }
+	            else
+	            {
+	                l = mid;
+	            }
+	        }
+	        return l;
+	    }
+	
+	    // namespace of fft and fft like algorithm
+	    namespace hint_transform
+	    {
+	        template <typename T>
+	        inline void transform_2point(T &sum, T &diff)
+	        {
+	            T temp0 = sum, temp1 = diff;
+	            sum = temp0 + temp1;
+	            diff = temp0 - temp1;
+	        }
+	        // Point of unit circle
+	        template <typename FloatTy>
+	        inline auto unit_root(FloatTy theta)
+	        {
+	            return std::polar<FloatTy>(1.0, theta);
+	        }
+	        namespace hint_fht
+	        {
+				// Look up table of unit roots
+	            template <typename FloatTy>
+	            class DynamicTable
+	            {
+	            public:
+	                using Complex = std::complex<FloatTy>;
+	                using CompVec = std::vector<Complex>;
+	                DynamicTable() {}
+	                DynamicTable(int log_len, int factor, bool conj = false)
+	                {
+	                    size_t vec_len = (1 << log_len) / 4;
+	                    table = CompVec(vec_len);
+	                    init(factor, conj);
+	                }
+	                void init(int factor, bool conj)
+	                {
+	                    size_t len = table.size() * 4;
+	                    FloatTy unity = -HINT_2PI * factor / len;
+	                    if (conj)
+	                    {
+	                        unity = -unity;
+	                    }
+	                    for (size_t i = 0; i < table.size(); i++)
+	                    {
+	                        table[i] = unit_root(unity * i);
+	                    }
+	                }
+	                const Complex &operator[](size_t n) const
+	                {
+	                    return table[n];
+	                }
+	                Complex &operator[](size_t n)
+	                {
+	                    return table[n];
+	                }
+	                auto get_it(size_t n = 0)
+	                {
+	                    return &table[n];
+	                }
+	
+	            private:
+	                CompVec table;
+	            };
+				
+				// The Fast Hartley Transform
+				// Reference:
+				// [1] J¨org Arndt.Matters Computational[M].Heidelberg:Springer Berlin,2011:515-533.  https://doi.org/10.1007/978-3-642-14764-7 https://www.jjj.de/fxt/fxtbook.pdf
+				// [2] Vlodymyr Myrnyy.A Simple and Efficient FFT Implementation in C++[J/OL].EETimes,2007. https://www.eetimes.com/a-simple-and-efficient-fft-implementation-in-c-part-i/ 
+				// [3] RRRR_wys.离散哈特莱变换(DHT)及快速哈特莱变换(FHT)学习.博客园.2018. https://www.cnblogs.com/RRRR-wys/p/10090007.html
+				// template class of FHT, using template recursion to speed up code
+	            template <size_t LEN, typename FloatTy>
+	            struct FHT
+	            {
+	                enum
+	                {
+	                    fht_len = LEN,
+	                    half_len = LEN / 2,
+	                    quater_len = LEN / 4,
+	                    log_len = hint_log2(fht_len)
+	                };
+	                using HalfFHT = FHT<half_len, FloatTy>;
+	                static DynamicTable<FloatTy> TABLE;
+	                template <typename FloatIt>
+					// Decimation in time FHT
+	                static void dit(FloatIt in_out)
+	                {
+	                    static_assert(std::is_same<typename std::iterator_traits<FloatIt>::value_type, FloatTy>::value, "Must be same as the FHT template float type");
+	                    HalfFHT::dit(in_out);
+	                    HalfFHT::dit(in_out + half_len);
+	
+	                    transform_2point(in_out[0], in_out[half_len]);
+	                    transform_2point(in_out[quater_len], in_out[half_len + quater_len]);
+	
+	                    auto it0 = in_out + 1, it1 = in_out + half_len - 1;
+	                    auto it2 = in_out + half_len + 1, it3 = in_out + fht_len - 1;
+	                    auto omega_it = TABLE.get_it(1);
+	                    for (; it0 < it1; ++it0, --it1, ++it2, --it3, omega_it++)
+	                    {
+	                        auto temp0 = it2[0], temp1 = it3[0];
+	                        auto omega = omega_it[0];
+	                        auto temp2 = temp0 * omega.real() + temp1 * omega.imag();
+	                        auto temp3 = temp0 * omega.imag() - temp1 * omega.real();
+	                        temp0 = it0[0], temp1 = it1[0];
+	                        it0[0] = temp0 + temp2;
+	                        it1[0] = temp1 + temp3;
+	                        it2[0] = temp0 - temp2;
+	                        it3[0] = temp1 - temp3;
+	                    }
+	                }
+					// Decimation in frequency FHT
+	                template <typename FloatIt>
+	                static void dif(FloatIt in_out)
+	                {
+	                    static_assert(std::is_same<typename std::iterator_traits<FloatIt>::value_type, FloatTy>::value, "Must be same as the FHT template float type");
+	                    transform_2point(in_out[0], in_out[half_len]);
+	                    transform_2point(in_out[quater_len], in_out[half_len + quater_len]);
+	
+	                    auto it0 = in_out + 1, it1 = in_out + half_len - 1;
+	                    auto it2 = in_out + half_len + 1, it3 = in_out + fht_len - 1;
+	                    auto omega_it = TABLE.get_it(1);
+	                    for (; it0 < it1; ++it0, --it1, ++it2, --it3, omega_it++)
+	                    {
+	                        auto temp0 = it0[0], temp1 = it1[0];
+	                        auto temp2 = it2[0], temp3 = it3[0];
+	                        it0[0] = temp0 + temp2;
+	                        it1[0] = temp1 + temp3;
+	                        temp0 = temp0 - temp2;
+	                        temp1 = temp1 - temp3;
+	                        auto omega = omega_it[0];
+	                        it2[0] = temp0 * omega.real() + temp1 * omega.imag();
+	                        it3[0] = temp0 * omega.imag() - temp1 * omega.real();
+	                    }
+	
+	                    HalfFHT::dif(in_out);
+	                    HalfFHT::dif(in_out + half_len);
+	                }
+	            };
+	            template <size_t LEN, typename FloatTy>
+	            DynamicTable<FloatTy> FHT<LEN, FloatTy>::TABLE(FHT<LEN, FloatTy>::log_len, 1, true);
+
+				// Template specialization of short FHTs
+	            template <typename FloatTy>
+	            struct FHT<0, FloatTy>
+	            {
+	                template <typename FloatIt>
+	                static void dit(FloatIt in_out) {}
+	                template <typename FloatIt>
+	                static void dif(FloatIt in_out) {}
+	            };
+	
+	            template <typename FloatTy>
+	            struct FHT<1, FloatTy>
+	            {
+	                template <typename FloatIt>
+	                static void dit(FloatIt in_out) {}
+	                template <typename FloatIt>
+	                static void dif(FloatIt in_out) {}
+	            };
+	
+	            template <typename FloatTy>
+	            struct FHT<2, FloatTy>
+	            {
+	                template <typename FloatIt>
+	                static void dit(FloatIt in_out)
+	                {
+	                    transform_2point(in_out[0], in_out[1]);
+	                }
+	                template <typename FloatIt>
+	                static void dif(FloatIt in_out)
+	                {
+	                    transform_2point(in_out[0], in_out[1]);
+	                }
+	            };
+	
+	            template <typename FloatTy>
+	            struct FHT<4, FloatTy>
+	            {
+	                template <typename FloatIt>
+	                static void dit(FloatIt in_out)
+	                {
+	                    auto temp0 = in_out[0], temp1 = in_out[1];
+	                    auto temp2 = in_out[2], temp3 = in_out[3];
+	                    transform_2point(temp0, temp1);
+	                    transform_2point(temp2, temp3);
+	                    in_out[0] = temp0 + temp2;
+	                    in_out[1] = temp1 + temp3;
+	                    in_out[2] = temp0 - temp2;
+	                    in_out[3] = temp1 - temp3;
+	                }
+	                template <typename FloatIt>
+	                static void dif(FloatIt in_out)
+	                {
+	                    auto temp0 = in_out[0], temp1 = in_out[1];
+	                    auto temp2 = in_out[2], temp3 = in_out[3];
+	                    transform_2point(temp0, temp2);
+	                    transform_2point(temp1, temp3);
+	                    in_out[0] = temp0 + temp1;
+	                    in_out[1] = temp0 - temp1;
+	                    in_out[2] = temp2 + temp3;
+	                    in_out[3] = temp2 - temp3;
+	                }
+	            };
+	
+	            template <typename FloatTy>
+	            struct FHT<8, FloatTy>
+	            {
+	                template <typename FloatIt>
+	                static void dit(FloatIt in_out)
+	                {
+	                    auto temp0 = in_out[0], temp1 = in_out[1];
+	                    auto temp2 = in_out[2], temp3 = in_out[3];
+	                    auto temp4 = in_out[4], temp5 = in_out[5];
+	                    auto temp6 = in_out[6], temp7 = in_out[7];
+	                    transform_2point(temp0, temp1);
+	                    transform_2point(temp2, temp3);
+	                    transform_2point(temp4, temp5);
+	                    transform_2point(temp6, temp7);
+	                    transform_2point(temp0, temp2);
+	                    transform_2point(temp1, temp3);
+	                    transform_2point(temp4, temp6);
+	                    transform_2point(temp5, temp7);
+	
+	                    in_out[0] = temp0 + temp4;
+	                    in_out[2] = temp2 + temp6;
+	                    in_out[4] = temp0 - temp4;
+	                    in_out[6] = temp2 - temp6;
+	                    static constexpr decltype(temp0) SQRT_2_2 = 0.70710678118654757;
+	                    temp0 = (temp5 + temp7) * SQRT_2_2;
+	                    temp2 = (temp5 - temp7) * SQRT_2_2;
+	                    in_out[1] = temp1 + temp0;
+	                    in_out[3] = temp3 + temp2;
+	                    in_out[5] = temp1 - temp0;
+	                    in_out[7] = temp3 - temp2;
+	                }
+	                template <typename FloatIt>
+	                static void dif(FloatIt in_out)
+	                {
+	                    auto temp0 = in_out[0], temp1 = in_out[1];
+	                    auto temp2 = in_out[2], temp3 = in_out[3];
+	                    auto temp4 = in_out[4], temp5 = in_out[5];
+	                    auto temp6 = in_out[6], temp7 = in_out[7];
+	                    transform_2point(temp0, temp4);
+	                    transform_2point(temp1, temp5);
+	                    transform_2point(temp2, temp6);
+	                    transform_2point(temp3, temp7);
+	                    transform_2point(temp0, temp1);
+	                    transform_2point(temp2, temp3);
+	                    in_out[0] = temp0 + temp2;
+	                    in_out[1] = temp1 + temp3;
+	                    in_out[2] = temp0 - temp2;
+	                    in_out[3] = temp1 - temp3;
+	                    static constexpr decltype(temp0) SQRT_2_2 = 0.70710678118654757;
+	                    temp0 = (temp5 + temp7) * SQRT_2_2;
+	                    temp2 = (temp5 - temp7) * SQRT_2_2;
+	                    transform_2point(temp4, temp6);
+	                    transform_2point(temp0, temp2);
+	                    in_out[4] = temp4 + temp0;
+	                    in_out[5] = temp4 - temp0;
+	                    in_out[6] = temp6 + temp2;
+	                    in_out[7] = temp6 - temp2;
+	                }
+	            };
+	
+	            // Function to help choose the correct template FHT dit function
+	            template <size_t LEN = 1>
+	            void fht_dit_template_alt(Float64 *input, size_t fht_len)
+	            {
+	                if (fht_len < LEN)
+	                {
+	                    fht_dit_template_alt<LEN / 2>(input, fht_len);
+	                    return;
+	                }
+	                FHT<LEN, Float64>::dit(input);
+	            }
+	            template <>
+	            void fht_dit_template_alt<0>(Float64 *input, size_t fht_len) {}
+	
+	             // Function to help choose the correct template FHT dif function
+	            template <size_t LEN = 1>
+	            void fht_dif_template_alt(Float64 *input, size_t fht_len)
+	            {
+	                if (fht_len < LEN)
+	                {
+	                    fht_dif_template_alt<LEN / 2>(input, fht_len);
+	                    return;
+	                }
+	                FHT<LEN, Float64>::dif(input);
+	            }
+	            template <>
+	            void fht_dif_template_alt<0>(Float64 *input, size_t fht_len) {}
+	
+	            auto fht_dit = fht_dit_template_alt<FHT_MAX_LEN>;
+	            auto fht_dif = fht_dif_template_alt<FHT_MAX_LEN>;
+	
+	            // Use FHT to accelerate convolution of float64 array
+	            void fht_convolution(Float64 fht_ary1[], Float64 fht_ary2[], Float64 out[], size_t fht_len)
+	            {
+	                if (fht_len == 0)
+	                {
+	                    return;
+	                }
+	                if (fht_len == 1)
+	                {
+	                    out[0] = fht_ary1[0] * fht_ary2[0];
+	                    return;
+	                }
+	                fht_len = int_floor2(fht_len);
+	                if (fht_len > FHT_MAX_LEN)
+	                {
+	                    throw("FHT len cannot be larger than FHT_MAX_LEN");
+	                }
+	                fht_dif(fht_ary1, fht_len);
+	                // When the two float arrays are actually same, execute DIF only once
+	                if (fht_ary1 != fht_ary2)
+	                {
+	                    fht_dif(fht_ary2, fht_len);
+	                }
+	                const double inv = 0.5 / fht_len;
+	                out[0] = fht_ary1[0] * fht_ary2[0] / fht_len;
+	                out[1] = fht_ary1[1] * fht_ary2[1] / fht_len;
+	                if (fht_len == 2)
+	                {
+	                    return;
+	                }
+	                // Theory of convolution using FHT
+	                auto temp0 = fht_ary1[2], temp1 = fht_ary1[3];
+	                auto temp2 = fht_ary2[2], temp3 = fht_ary2[3];
+	                transform_2point(temp0, temp1);
+	                out[2] = (temp2 * temp0 + temp3 * temp1) * inv;
+	                out[3] = (temp3 * temp0 - temp2 * temp1) * inv;
+	                for (size_t i = 4; i < fht_len; i *= 2)
+	                {
+	                    auto it0 = fht_ary1 + i, it1 = it0 + i - 1;
+	                    auto it2 = fht_ary2 + i, it3 = it2 + i - 1;
+	                    auto it4 = out + i, it5 = it4 + i - 1;
+	                    for (; it0 < it1; it0 += 2, it1 -= 2, it2 += 2, it3 -= 2, it4 += 2, it5 -= 2)
+	                    {
+	                        temp0 = *it0, temp1 = *it1, temp2 = *it2, temp3 = *it3;
+	                        transform_2point(temp0, temp1);
+	                        *it4 = (temp2 * temp0 + temp3 * temp1) * inv;
+	                        *it5 = (temp3 * temp0 - temp2 * temp1) * inv;
+	                        temp0 = *(it1 - 1), temp1 = *(it0 + 1), temp2 = *(it3 - 1), temp3 = *(it2 + 1);
+	                        transform_2point(temp0, temp1);
+	                        *(it5 - 1) = (temp2 * temp0 + temp3 * temp1) * inv;
+	                        *(it4 + 1) = (temp3 * temp0 - temp2 * temp1) * inv;
+	                    }
+	                }
+	                fht_dit(out, fht_len);
+	            }
+	        }
+	    }
+	    // FHT multiplication
+		template<typename UintTy>
+		void FHTMul( UintTy* out, const UintTy* in1, size_t in_len1, const UintTy* in2, size_t in_len2 )
+		{
+			// Use 16bit binary as an element
+			auto   out_16 = reinterpret_cast<uint16_t*>( out );
+			auto   in1_16 = reinterpret_cast<const uint16_t*>( in1 );
+			auto   in2_16 = reinterpret_cast<const uint16_t*>( in2 );
+			size_t in1_len16 = in_len1 * sizeof( UintTy ) / sizeof( uint16_t );
+			size_t in2_len16 = in_len2 * sizeof( UintTy ) / sizeof( uint16_t );
+			size_t out_len16 = in1_len16 + in2_len16, conv_len = out_len16 - 1, fht_len = int_ceil2( conv_len );
+
+			std::vector<Float64> buffer1( fht_len ), buffer2( fht_len );  // FHT bufffer
+			std::copy( in1_16, in1_16 + in1_len16, buffer1.data() );
+			std::copy( in2_16, in2_16 + in2_len16, buffer2.data() );
+
+			hint_transform::hint_fht::fht_convolution( buffer1.data(), buffer2.data(), buffer1.data(), fht_len );  // FHT convolution
+
+			uint64_t carry = 0;
+			for ( size_t i = 0; i < conv_len; i++ )
+			{
+				carry += uint64_t( buffer1[ i ] + 0.5 );
+				out_16[ i ] = carry & UINT16_MAX;
+				carry = carry >> 16;
+			}
+			out_16[ conv_len ] = carry & UINT16_MAX;
+		}
+		// FHT Square
+		template <typename UintTy>
+		void FHTSquare( UintTy* out, const UintTy* in, size_t in_len )
+		{
+			// Use 16bit binary as an element
+			auto   out_16 = reinterpret_cast<uint16_t*>( out );
+			auto   in_16 = reinterpret_cast<const uint16_t*>( in );
+			size_t in_len16 = in_len * sizeof( UintTy ) / sizeof( uint16_t );
+			size_t out_len16 = in_len16 * 2, conv_len = out_len16 - 1, fht_len = int_ceil2( conv_len );
+
+			std::vector<Float64> buffer( fht_len );	 // FHT bufffer
+			std::copy( in_16, in_16 + in_len16, buffer.data() );
+
+			hint_transform::hint_fht::fht_convolution( buffer.data(), buffer.data(), buffer.data(), fht_len );	// 卷积
+
+			uint64_t carry = 0;
+			for ( size_t i = 0; i < conv_len; i++ )
+			{
+				carry += uint64_t( buffer[ i ] + 0.5 );
+				out_16[ i ] = carry & UINT16_MAX;
+				carry = carry >> 16;
+			}
+			out_16[ conv_len ] = carry & UINT16_MAX;
+		}
+	}
 
 	class BigInteger
 	{
@@ -425,8 +885,8 @@ namespace TwilightDream::BigInteger
 			else
 				return *this == other ? Square_I() : BaseMul_I( other );
 #else
-			if ( ( values.size() > KARATSUBA_LIMIT && other.values.size() > KARATSUBA_LIMIT ) )
-				return KaratsubaMultiplication( other );
+			if ( ( values.size() > FHT_LIMIT && other.values.size() > FHT_LIMIT ) )
+				return *this == other ? FHTSquare() : FHTMultiplication( other );
 			else
 				return BaseMultiplication( other );
 #endif	// __AVX2__
@@ -554,6 +1014,58 @@ namespace TwilightDream::BigInteger
 			_free_alloct( result );
 
 			// Return a reference to the modified current instance
+			return *this;
+		}
+
+				/**
+		 * @brief Performs FHT multiplication of two BigIntegers.
+		 *
+		 * This function multiplies the current instance by another BigInteger using
+		 * FHT algorithm and updates the current instance with the result.
+		 *
+		 * @param other The BigInteger to be multiplied.
+		 * @return Reference to the modified current instance after multiplication.
+		 */
+		BigInteger& FHTMultiplication( const BigInteger& other )
+		{
+			const size_t thisSize = values.size();
+			const size_t otherSize = other.values.size();
+
+			// Make a copy of the current instance's values
+			std::vector<uint32_t> copy1(values.begin(),values.end());
+			std::vector<uint32_t> copy2( other.values.begin(), other.values.end() );
+			std::vector<uint32_t> res( thisSize + otherSize );
+
+			// Use FHT to accelerate multiplication
+			hint::FHTMul( res.data(), copy1.data(), copy1.size(), copy2.data(), copy2.size() );
+
+			values = std::vector<digit_type>( res.begin(), res.end() );
+			// Remove leading zeros and resize the storage
+			Clean();
+
+			// Return a reference to the modified current instance
+			return *this;
+		}
+
+		/**
+		 * @brief Squares the current BigInteger by using FHT.
+		 *
+		 * This function squares the current instance by performing a FHT
+		 * algorithm and updates the current instance with the result.
+		 *
+		 * @return Reference to the modified current instance after squaring.
+		 */
+		BigInteger& FHTSquare()
+		{
+			size_t	t = values.size();
+			std::vector<uint32_t> copy( values.begin(), values.end() );
+			std::vector<uint32_t> res( t * 2 );
+
+			// Perform FHT algorithm for squaring
+			hint::FHTSquare( res.data(), copy.data(), t );
+
+			values = std::vector<digit_type>(res.begin(),res.end());
+			Clean();
 			return *this;
 		}
 
