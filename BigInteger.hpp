@@ -41,7 +41,7 @@ namespace TwilightDream::BigInteger
 	const uint64_t BASE = digit_type(pow(2, EXPONENT));
 	
 	constexpr int	   KARATSUBA_LIMIT = 70;
-	constexpr int      FHT_LIMIT = 50;
+	constexpr int      FHT_LIMIT = 75;
 	constexpr int	   BINARY_SEARCH_DIVISION_LIMIT = 4;
 	constexpr int	   DONALD_KNUTH_LONG_DIVISION_LIMIT = 20;
 	constexpr int	   MULTI_THREAD_LIMIT = 10000;
