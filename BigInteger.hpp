@@ -45,7 +45,8 @@ namespace TwilightDream::BigInteger
 	const uint64_t BASE = digit_type(pow(2, EXPONENT));
 	
 	constexpr int KARATSUBA_LIMIT = 70;
-	constexpr int FHT_LIMIT = 150;
+	constexpr int FHT_MAX_LIMIT = 7500;
+	constexpr int FHT_MIN_LIMIT = 150;
 	constexpr int BINARY_SEARCH_DIVISION_LIMIT = 4;
 	constexpr int DONALD_KNUTH_LONG_DIVISION_LIMIT = 20;
 	constexpr int MULTI_THREAD_LIMIT = 10000;
@@ -54,7 +55,7 @@ namespace TwilightDream::BigInteger
 
 	inline std::random_device TrueRandomDevice;
 	inline std::default_random_engine RandomEngine( TrueRandomDevice() );
-	inline std::uniform_int_distribution<uint64_t> Dist( 0, BASE - 1 );
+	inline std::uniform_int_distribution<uint64_t> UniformIntDistribution( 0, BASE - 1 );
 
 	namespace HyperIntegerFunctions
 	{
@@ -439,7 +440,8 @@ namespace TwilightDream::BigInteger
 					fht_len = int_floor2( fht_len );
 					if ( fht_len > FHT_MAX_LEN )
 					{
-						throw( "FHT len cannot be larger than FHT_MAX_LEN" );
+						std::cout << "FHT len cannot be larger than FHT_MAX_LEN" << std::endl;
+						throw("FHT len cannot be larger than FHT_MAX_LEN" );
 					}
 					fht_dif( fht_ary1, fht_len );
 					// When the two float arrays are actually same, execute DIF only once
@@ -688,6 +690,13 @@ namespace TwilightDream::BigInteger
 
 		BigInteger& operator+=( const BigInteger& other )
 		{
+			if(this == &other)
+			{
+				BigInteger self(other);
+				*this += self;
+				return *this;
+			}
+
 			if(this->IsZero() && other.sign == 1)
 			{
 				*this = other;
@@ -762,6 +771,13 @@ namespace TwilightDream::BigInteger
 
 		BigInteger& operator-=( const BigInteger& other )
 		{
+			if(this == &other)
+			{
+				BigInteger self(other);
+				*this -= self;
+				return *this;
+			}
+
 			if(this->IsZero() && other.sign == -1)
 			{
 				*this = other;
@@ -876,6 +892,13 @@ namespace TwilightDream::BigInteger
 
 		BigInteger& operator*=( const BigInteger& other )
 		{
+			if(this == &other)
+			{
+				BigInteger self(other);
+				*this *= self;
+				return *this;
+			}
+
 			if ( IsZero() || other.IsZero() )
 			{
 				sign = 1;
@@ -885,14 +908,16 @@ namespace TwilightDream::BigInteger
 			}
 			sign *= other.sign;
 
-			if ( ( values.size() > FHT_LIMIT && other.values.size() > FHT_LIMIT ) )
+			/*
+			if ( ( values.size() > FHT_MIN_LIMIT && other.values.size() > FHT_MIN_LIMIT ) && ( values.size() <= FHT_MAX_LIMIT && other.values.size() <= FHT_MAX_LIMIT ) )
 			{
-				if(*this == other)
+				if ( *this == other )
 					return FHTSquare();
 				else
 					return FHTMultiplication( other );
 			}
-			else if ( ( values.size() > KARATSUBA_LIMIT && other.values.size() > KARATSUBA_LIMIT ) )
+			*/
+			if ( ( values.size() > KARATSUBA_LIMIT && other.values.size() > KARATSUBA_LIMIT ) )
 			{
 				return KaratsubaMultiplication( other );
 			}
@@ -1144,20 +1169,50 @@ namespace TwilightDream::BigInteger
 			high.values = std::move( highValue );
 		}
 
-		BigInteger& Power( const size_t p )
+		// result = result.Power(exponent)
+		BigInteger& Power( const size_t exponent )
 		{
-			if ( p == 0 )
+			if ( exponent == 0 )
 			{
 				*this = 1;
 				return *this;
 			}
 
 			BigInteger result( *this );
-			for ( size_t i = 0; i < p - 1; ++i )
+			for ( size_t i = 0; i < exponent - 1; ++i )
 			{
 				result *= *this;
 			}
 			*this = result;
+			return *this;
+		}
+
+		// result = result.BigPower(exponent)
+		BigInteger& BigPower( const BigInteger& exponent )
+		{
+			const BigInteger ZERO = 0;
+			const BigInteger ONE = 1;
+			BigInteger result = ONE;
+			BigInteger base = *this;
+
+			if ( exponent == ZERO )
+			{
+				*this = 1;
+				return *this;
+			}
+
+			size_t index_bits = exponent.BitSize();
+			for ( size_t i = 0; i < index_bits; i++ )
+			{
+				if(exponent.GetBit(i))
+				{
+					result *= base;
+				}
+
+				base.Power(2);
+			}
+
+			values = std::move(result.values);
 			return *this;
 		}
 
@@ -1175,23 +1230,33 @@ namespace TwilightDream::BigInteger
 			return *this;
 		}
 
-		BigInteger& PowerWithModulo( const BigInteger& e, const BigInteger& m )
+		BigInteger& PowerWithModulo(const BigInteger& e, const BigInteger& m)
 		{
-			size_t	   bitSize = e.BitSize();
-			BigInteger result = *this % m;
+			const BigInteger ZERO = 0;
+			const BigInteger ONE = 1;
+			BigInteger result = ONE;
+			BigInteger base = *this;
+			BigInteger exponent = e;
 
-			for ( size_t i = 1; i < bitSize; ++i )
+			if(m == ONE)
 			{
-				result *= result;
-				result %= m;
-				if ( e.GetBit( bitSize - ( i + 1 ) ) )
+				*this = ZERO;
+				return *this;
+			}
+			
+			size_t index_bits = exponent.BitSize();
+			for ( size_t i = 0; i < index_bits; i++ )
+			{
+				if(exponent.GetBit(i))
 				{
-					result *= *this;
+					result *= base;
 					result %= m;
 				}
+
+				base.Power(2) %= m;
 			}
 
-			values = std::move( result.values );
+			values = std::move(result.values);
 			return *this;
 		}
 
@@ -1397,6 +1462,13 @@ namespace TwilightDream::BigInteger
 
 		BigInteger& operator/=( const BigInteger& other )
 		{
+			if(this == &other)
+			{
+				BigInteger self(other);
+				*this /= self;
+				return *this;
+			}
+
 			sign *= other.sign;
 			Divide( other );
 			return *this;
@@ -1437,6 +1509,13 @@ namespace TwilightDream::BigInteger
 			}
 			else
 			{
+				//There are special cases where the computation fails using short division.
+				if(other.values[0] == 0)
+				{
+					DonaldKnuthLongDivision(other, r);
+					return *this;
+				}
+
 				// Use ShortDivision for small divisors
 				return ShortDivision(other, r);
 			}
@@ -1692,54 +1771,32 @@ namespace TwilightDream::BigInteger
 			return *this;
 		}
 
-		bool IsPrime() const
-		{
-			const BigInteger zero( 0 );
-			const BigInteger one( 1 );
-			const BigInteger two( 2 );
-			const BigInteger three( 3 );
-
-			if ( *this <= one || *this % two == zero || *this % three == zero )
-				return false;
-
-			BigInteger i = two;
-			BigInteger i2 = zero;
-			while ( i * i <= *this )
-			{
-				i2 = i + two;
-
-				if ( *this % i == zero || *this % i2 == zero )
-					return false;
-
-				i += 6;
-			}
-
-			return true;
-		}
-
 		bool IsEven() const
 		{
 			return (values[ 0 ] & 1) == 0;
 		}
 
-		//bool IsPowerOfTwo() const
-		//{
-		//	//Is the current sign bit state negative?
-		//	if(this->sign == -1)
-		//		return false;
+		bool IsPowerOfTwo() const
+		{
+			if(this->IsZero())
+				return false;
 
-		//	//If the last binary bit is 0, it must be an even number, otherwise it is an odd number.
-		//	if((values[ 0 ] & 1) == 0)
-		//	{
-		//		const BigInteger zero( 0 );
-		//		const BigInteger one( 1 );
+			//Is the current sign bit state negative?
+			if(this->sign == -1)
+				return false;
 
-		//		//Performs, on the copied entire array data, bitwise operations on whether the binary is a power of 2 or not.
-		//		return (!this->IsZero()) && ((*this) & (*this - one) == zero); 
-		//	}
+			//If the last binary bit is 0, it must be an even number, otherwise it is an odd number.
+			if((values[ 0 ] & 1) == 0)
+			{
+				const BigInteger ONE( 1 );
+				const BigInteger TEMPORARY = *this & (*this - ONE);
 
-		//	return false;
-		//}
+				//Performs, on the copied entire array data, bitwise operations on whether the binary is a power of 2 or not.
+				return TEMPORARY.values == std::vector<digit_type>(TEMPORARY.values.size(), 0); 
+			}
+
+			return false;
+		}
 
 		bool IsZero() const
 		{
@@ -1925,6 +1982,45 @@ namespace TwilightDream::BigInteger
 			}
 
 			return result * sign;
+		}
+
+		uint64_t ToUnsignedInt() const
+		{
+			uint64_t result = 0;
+			uint64_t power = 1;
+			uint64_t base = BASE;
+			size_t size = values.size();
+    
+			for (size_t i = 0; i < size; ++i)
+			{
+				result += values[i] * power;
+				power *= base;
+			}
+
+			return result;
+		}
+
+		BigInteger& FromUnsignedInt(uint64_t value)
+		{
+			const int64_t base = BASE;
+			const uint64_t MaxUint64 = std::numeric_limits<uint64_t>::max();
+
+			if (value <= MaxUint64 / base)
+			{
+				return BigInteger(static_cast<int64_t>(value));
+			}
+			else
+			{
+				std::vector<digit_type> values;
+				while (value > 0)
+				{
+					values.push_back(static_cast<digit_type>(value % base));
+					value /= base;
+				}
+
+				this->values = values;
+				return *this;
+			}
 		}
 
 		BigInteger operator&( const BigInteger& other ) const
@@ -2292,6 +2388,9 @@ namespace TwilightDream::BigInteger
 
 		BigInteger& operator=( const BigInteger& other )
 		{
+			if(this == &other)
+				return *this;
+
 			values = other.values;
 			sign = other.sign;
 			return *this;
@@ -2555,14 +2654,15 @@ namespace TwilightDream::BigInteger
 		static BigInteger RandomGenerateNBit( size_t n )
 		{
 			std::uniform_int_distribution<uint16_t> dist01( 0, 1 );
-			BigInteger								ud_prng;
-			ud_prng.values.resize( n / EXPONENT + 1 );
+			BigInteger								ud_prng(0);
+			size_t digit_type_count = n % EXPONENT == 0 ? n / EXPONENT : n / EXPONENT + 1;
+			ud_prng.values = std::vector<digit_type>(digit_type_count, 0);
 			ud_prng.SetBit( n - 1 );
 			for ( size_t i = 0; i < n; ++i )
 			{
-				if ( dist01( RandomEngine ) )
+				if ( dist01( RandomEngine ) == 1 )
 				{
-					ud_prng.SetBit( i );
+					ud_prng.SetBit( true, i );
 				}
 			}
 
@@ -2581,57 +2681,73 @@ namespace TwilightDream::BigInteger
 		 */
 		static bool MillerRabin( const BigInteger& n, int k )
 		{
-			const BigInteger zero( 0 );
-			const BigInteger one( 1 );
-			const BigInteger two( 2 );
+			const BigInteger ZERO( 0 );
+			const BigInteger ONE( 1 );
+			const BigInteger TWO( 2 );
 
-			// Initialize random number generator
-			std::uniform_int_distribution<uint64_t> ud_prng( 2, ( ( n - 2 ) >= BigInteger( INT64_MAX ) ? INT64_MAX : ( n.ToInt() - 2 ) ) );
+			if(n <= ZERO)
+				return false;
 
-			uint32_t   s = 0;
-			BigInteger d = n - 1;
-			BigInteger a, x;
+			if(n.IsEven())
+				return false;
 
-			bool tryAgain = false;
+			const BigInteger n_minus_one = n - ONE;
+			const BigInteger n_minus_two = n - TWO;
+			BigInteger x = ZERO;
 
-			// Factorize n-1 to d * 2^s
+			bool TryAgain = false;
+
+			// Decompose (n - 1) to write it as (2 ** s) * d
+			// While d is even, divide it by 2 and increase the exponent.
+			BigInteger d = n_minus_one;
+			size_t s = 0;
 			while ( d.IsEven() )
 			{
-				s++;
+				++s;
 				d >>= 1;
 			}
 
+			const BigInteger RangeInteger = n_minus_two - TWO + ONE;
+
 			// Perform Miller-Rabin test
+			// Test k witnesses.
 			for ( size_t i = 0; i < k; ++i )
 			{
-				a = ud_prng( RandomEngine );
-				x = a.PowerWithModulo( d, n );
+				// Generate random integer a, where 2 <= a <= (n - 2)
+				const BigInteger a = RandomGenerateNBit(n.BitSize());
+				x = TWO + (a % RangeInteger);
 
-				if ( x == one || x == n - 1 )
+				x.PowerWithModulo( d, n );
+
+				if ( x == ONE || x == n_minus_one )
 				{
 					continue;
 				}
 
 				for ( size_t r = 0; r < s; ++r )
 				{
-					x.PowerWithModulo( 2, n );
+					x.PowerWithModulo( TWO, n );
 
-					if ( x == one )
+					if ( x == ONE )
 					{
+						// n is composite.
 						return false;
 					}
-					else if ( x == n - 1 )
+					else if ( x == n_minus_one )
 					{
-						tryAgain = true;
+						// Exit inner loop and continue with next witness.
+						TryAgain = true;
 						break;
 					}
 				}
 
-				if ( !tryAgain )
+				//x != n_minus_one
+				if ( !TryAgain )
 					return false;
-				tryAgain = false;
+				TryAgain = false;
 			}
 
+			//n is *probably* prime
 			return true;
 		}
 
@@ -2648,21 +2764,29 @@ namespace TwilightDream::BigInteger
 		 */
 		static bool MillerRabinWithMontgomery( const BigInteger& n, int k )
 		{
-			const BigInteger one( 1 );
+			const BigInteger ZERO( 0 );
+			const BigInteger ONE( 1 );
+			const BigInteger TWO( 2 );
 
-			// Initialize random number generator
-			std::uniform_int_distribution<uint64_t> ud_prng( 2, ( ( n - 2 ) >= BigInteger( INT64_MAX ) ? INT64_MAX : ( n.ToInt() - 2 ) ) );
+			if(n <= ZERO)
+				return false;
 
-			uint32_t   s = 0;
-			BigInteger d = n - 1;
-			BigInteger a, x;
+			if(n.IsEven())
+				return false;
 
-			bool tryAgain = false;
+			const BigInteger n_minus_one = n - ONE;
+			const BigInteger n_minus_two = n - TWO;
+			BigInteger x = ZERO;
 
-			// Factorize n-1 to d * 2^s
+			bool TryAgain = false;
+
+			// Decompose (n - 1) to write it as (2 ** s) * d
+			// While d is even, divide it by 2 and increase the exponent.
+			BigInteger d = n_minus_one;
+			size_t s = 0;
 			while ( d.IsEven() )
 			{
-				s++;
+				++s;
 				d >>= 1;
 			}
 
@@ -2697,13 +2821,19 @@ namespace TwilightDream::BigInteger
 				}
 			}
 
+			const BigInteger RangeInteger = n_minus_two - TWO + ONE;
+
 			// Perform Miller-Rabin test with Montgomery multiplication
+			// Test k witnesses.
 			for ( size_t i = 0; i < k; ++i )
 			{
-				a = ud_prng( RandomEngine );
-				x = a.MontgomeryPower( d, n, mprime, r, rsize );
+				// Generate random integer a, where 2 <= a <= (n - 2)
+				const BigInteger a = RandomGenerateNBit(n.BitSize());
+				x = TWO + (a % RangeInteger);
 
-				if ( x == one || x == n - 1 )
+				x.MontgomeryPower( d, n, mprime, r, rsize );
+
+				if ( x == ONE || x == n_minus_one )
 				{
 					continue;
 				}
@@ -2712,20 +2842,21 @@ namespace TwilightDream::BigInteger
 				{
 					x.PowerWithModulo( 2, n );
 
-					if ( x == one )
+					if ( x == ONE )
 					{
 						return false;
 					}
-					else if ( x == n - 1 )
+					else if ( x == n_minus_one )
 					{
-						tryAgain = true;
+						TryAgain = true;
 						break;
 					}
 				}
 
-				if ( !tryAgain )
+				//x != n_minus_one
+				if ( !TryAgain )
 					return false;
-				tryAgain = false;
+				TryAgain = false;
 			}
 
 			return true;
@@ -2832,6 +2963,105 @@ namespace TwilightDream::BigInteger
 			return Modulo(temporary, modulus);
 		}
 
+		static bool IsPrime_SlowAlgorithm(const BigInteger& Number)
+		{
+			uint64_t NormalNumber = Number.ToUnsignedInt();
+
+			if ( NormalNumber < 2 )
+			{
+				return false;
+			}
+
+			// Eratosthenes sieve
+			std::vector<bool> SieveTable(10240000, false);
+
+			SieveTable[ 0 ] = SieveTable[ 1 ] = false;
+
+			for ( uint64_t i = 3; i * i <= NormalNumber; i += 2 )
+			{
+				// If prime[p] is not changed, then it is a prime
+				if ( SieveTable[ i / 2 ] == false )
+				{
+					// Update all multiples of p greater than or equal to the square of it numbers
+					// which are multiple of p and are less than p^2 are already been marked.
+					for ( uint64_t j = i * 3; j <= NormalNumber; j += 2 * i )
+					{
+						SieveTable[ j / 2 ] = true;
+					}
+				}
+			}
+
+			return SieveTable[ Number.ToUnsignedInt() ];
+		}
+
+		static bool IsPrime_FastAlgorithm(const BigInteger& Number)
+		{
+			std::vector<BigInteger> SmallPrimes
+			{
+				BigInteger(2),
+				BigInteger(3),
+				BigInteger(5),
+				BigInteger(7),
+				BigInteger(11)
+			};
+
+			// Check for small numbers.
+			if(Number < 13)
+			{
+				for(const auto& SmallPrime : SmallPrimes)
+				{
+					if(Number == SmallPrime)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+
+			size_t bit_size = Number.BitSize();
+			/*
+				Returns minimum number of rounds for Miller-Rabing primality testing, on number bitsize.
+
+				According to NIST FIPS 186-4, Appendix C, Table C.3, minimum number of rounds of M-R testing
+				using an error probability of 2 ** (-100), for different p, q bitsizes are:
+				* p, q bitsize: 512; rounds: 7
+				* p, q bitsize: 1024; rounds: 4
+				* p, q bitsize: 1536; rounds: 3
+				See: http://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf
+			*/
+			auto primality_testing_rounds = [&bit_size](const BigInteger& number) -> size_t
+			{
+				// Set number of rounds.
+				if ( bit_size >= 1536 )
+					return 3;
+				if ( bit_size >= 1024 )
+					return 4;
+				if (bit_size >= 512)
+					return 7;
+				// For smaller bitsizes, set arbitrary number of rounds.
+				return 10;
+			};
+
+			size_t k = primality_testing_rounds(Number);
+
+			if(bit_size > 2048)
+				return BigInteger::MillerRabinWithMontgomery(Number, k + 1);
+			else
+				return BigInteger::MillerRabin(Number, k + 1);
+		}
+
+		static bool IsPrime(const BigInteger& number)
+		{
+			if (number < 10240000)
+			{
+				return IsPrime_SlowAlgorithm(number);
+			}
+			else
+			{
+				return IsPrime_FastAlgorithm(number);
+			}
+		}
+
 		std::string ToString() const
 		{
 			if ( *this == 0 )
@@ -2884,7 +3114,12 @@ namespace TwilightDream::BigInteger
 				for ( size_t i = 0; i < bit_size; i++ )
 				{
 					if ( result.GetBit( i ) )
-						number_string[ i ] = '1';
+					{
+						if( i < reference_bit_capacity )
+							number_string[ i ] = '1';
+						else
+							break;
+					}
 				}
 
 				// Reverse the string to get correct binary representation
