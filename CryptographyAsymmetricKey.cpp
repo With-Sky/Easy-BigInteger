@@ -2,7 +2,7 @@
 
 namespace TwilightDream::CryptographyAsymmetric
 {
-	void RSA::GeneratePrimesInParallelFunction(size_t bit_count, std::vector<FindPrimeState>& primes, size_t primes_index)
+	void RSA::GeneratePrimesInParallelFunction(std::vector<FindPrimeState>& primes, size_t primes_index)
 	{
 		BigInteger PrimeNumber = BigInteger::RandomGenerateNBit(bit_count);
 		PrimeNumber = MIN + (PrimeNumber % RANGE_INTEGER);
@@ -13,7 +13,7 @@ namespace TwilightDream::CryptographyAsymmetric
 			PrimeNumber |= ONE;
 		}
 
-		bool IsPrime = BigInteger::IsPrime(PrimeNumber);
+		bool IsPrime = Tester.IsPrime(PrimeNumber);
 
 		while ( !IsPrime )
 		{
@@ -30,7 +30,7 @@ namespace TwilightDream::CryptographyAsymmetric
 
 			//size_t BitSize = PrimeNumber.BitSize();
 			//std::cout << "Generate BigInteger Bit Size Is :" << BitSize << std::endl;
-			IsPrime = BigInteger::IsPrime(PrimeNumber);
+			IsPrime = Tester.IsPrime(PrimeNumber);
 		}
 
 		primes[primes_index].IsPrime = IsPrime;
@@ -40,12 +40,12 @@ namespace TwilightDream::CryptographyAsymmetric
 	std::optional<RSA::FindPrimeState> RSA::GeneratePrimesInParallelFunctions(size_t bit_count)
 	{
 		std::vector<std::future<void>> futures;
-		const size_t				   max_thread_count = std::thread::hardware_concurrency();
+		const size_t				   max_thread_count = 2; //std::thread::hardware_concurrency();
 		std::vector<FindPrimeState>	   prime_map( max_thread_count, FindPrimeState() );
 
 		for ( size_t i = 0; i < prime_map.size(); ++i )
 		{
-			futures.push_back( std::async( std::launch::async, &RSA::GeneratePrimesInParallelFunction, this, bit_count, std::ref( prime_map ), i ) );
+			futures.push_back( std::async( std::launch::async, &RSA::GeneratePrimesInParallelFunction, this, std::ref( prime_map ), i ) );
 		}
 
 		size_t counter = 0; // 初始化为 0，因为你可能需要等待所有线程完成
@@ -73,12 +73,13 @@ namespace TwilightDream::CryptographyAsymmetric
 		{
 			if ( state.IsPrime )
 			{
-				std::cout << "Generate BigInteger Is Prime: True" << std::endl;
+				//std::cout << "Generate BigInteger Is Prime: True" << std::endl;
 				return state;
 			}
 			else
 			{
-				std::cout << "Generate BigInteger Is Prime: False" << std::endl;
+				//std::cout << "Generate BigInteger Is Prime: False" << std::endl;
+				continue;
 			}
 		}
 
@@ -105,14 +106,23 @@ namespace TwilightDream::CryptographyAsymmetric
 
 	RSA::RSA_AlgorithmNumbers RSA::GenerateKeys( size_t bit_count, bool is_pkcs )
 	{
-		/*if(bit_count == 0 || bit_count < 1024)
+		if(bit_count == 0 || bit_count == 1)
 		{
 			throw std::invalid_argument("Invalid bit_count values.");
-		}*/
+		}
 
 		// Generate two large prime numbers
 		BigInteger PrimeNumberA = GeneratePrimeNumber(bit_count / 2);
+		if(!PrimeNumberA.IsZero())
+		{
+			std::cout << "The large prime A has been generated." << "\n";
+		}
+
 		BigInteger PrimeNumberB = GeneratePrimeNumber(bit_count / 2);
+		if(!PrimeNumberB.IsZero())
+		{
+			std::cout << "The large prime B has been generated." << "\n";
+		}
 		
 		// Calculate n = p * q
 		BigInteger AlgorithmModulus = PrimeNumberA * PrimeNumberB;
@@ -173,8 +183,13 @@ namespace TwilightDream::CryptographyAsymmetric
 		{
 			return;
 		}
-	
+		//std::cout << "---------------------------------\n";
+		//std::cout << "PlainMessage: " << PlainMessage.ToString( 10 ) << "\n";
+		//std::cout << "EncryptExponent: " << EncryptExponent.ToString( 10 ) << "\n";
+		//std::cout << "AlgorithmModulus: " << AlgorithmModulus.ToString( 10 ) << "\n";
 		PlainMessage.PowerWithModulo(EncryptExponent, AlgorithmModulus);
+		//std::cout << "CipherText: " << PlainMessage.ToString( 10 ) << "\n";
+		//std::cout << "---------------------------------\n";
 	}
 
 	void RSA::Decryption(BigInteger& CipherMessage, const BigInteger& DecryptExponent, const BigInteger& AlgorithmModulus )
@@ -183,7 +198,13 @@ namespace TwilightDream::CryptographyAsymmetric
 		{
 			return;
 		}
-	
+		//std::cout << "---------------------------------\n";
+		//std::cout << "CipherText: " << CipherMessage.ToString( 10 ) << "\n";
+		//std::cout << "DecryptExponent: " << DecryptExponent.ToString( 10 ) << "\n";
+		//std::cout << "AlgorithmModulus: " << AlgorithmModulus.ToString( 10 ) << "\n";
 		CipherMessage.PowerWithModulo(DecryptExponent, AlgorithmModulus);
+		//std::cout << "PlainMessage: " << CipherMessage.ToString( 10 ) << "\n";
+		//std::cout << "---------------------------------\n";
+
 	}
 }  // namespace TwilightDream::CryptographyAsymmetric

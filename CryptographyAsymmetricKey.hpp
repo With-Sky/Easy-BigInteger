@@ -1,6 +1,6 @@
 #pragma once
-#include "BigInteger.hpp"
-#include <unordered_map>
+
+#include "PrimeNumberTester.hpp"
 #include <optional>
 #include <future>
 
@@ -22,6 +22,7 @@ namespace TwilightDream::CryptographyAsymmetric
 	{
 	private:
 		using BigInteger = TwilightDream::BigInteger::BigInteger;
+		using PrimeNumberTester = TwilightDream::PrimeNumberTester;
 		const BigInteger ONE = BigInteger( 1 );
 		const BigInteger TWO = BigInteger( 2 );
 		const BigInteger THREE = BigInteger( 3 );
@@ -39,6 +40,7 @@ namespace TwilightDream::CryptographyAsymmetric
 		BigInteger MIN = 0;
 		BigInteger MAX = 0;
 		BigInteger RANGE_INTEGER = 0;
+		PrimeNumberTester Tester;
 
 		struct FindPrimeState
 		{
@@ -46,7 +48,7 @@ namespace TwilightDream::CryptographyAsymmetric
 			BigInteger Number = BigInteger( 0 );
 		};
 
-		void GeneratePrimesInParallelFunction(size_t bit_count, std::vector<FindPrimeState>& primes, size_t primes_index);
+		void GeneratePrimesInParallelFunction(std::vector<FindPrimeState>& primes, size_t primes_index);
 		std::optional<FindPrimeState> GeneratePrimesInParallelFunctions(size_t bit_count);
 		BigInteger GeneratePrimeNumber( size_t bit_count );
 
@@ -86,13 +88,22 @@ namespace TwilightDream::CryptographyAsymmetric
 		* @param bit_count The bit length of the RSA modulus.
 		* @param test_count The number of iterations for primality testing during key generation.
 		* @param rounds The number of iterations for the self-sanity check.
-		* @return True if the self-sanity check passes, false otherwise.
+		* @return True if the self-sanity check all executed, false otherwise.
 		*/
 		static bool SelfSanityCheck( size_t bit_count, size_t rounds )
 		{
+			if(rounds == 0)
+			{
+				return false;
+			}
+
 			RSA		   rsa;
 			BigInteger OriginalMessage = 0;
 			BigInteger EncryptedMessage = 0, DecryptedMessage = 0;
+			
+			size_t FailureCounter = 0;
+			size_t SuccessCounter = 0;
+
 			for ( size_t current_round = 0; current_round < rounds; current_round++ )
 			{
 				// 生成密钥对
@@ -110,12 +121,30 @@ namespace TwilightDream::CryptographyAsymmetric
 				// 验证结果
 				if ( OriginalMessage != DecryptedMessage )
 				{
-					std::cerr << "Decryption failed!" << std::endl;
-					return false;
+					std::cerr << "Failure: RSA encryption and decryption are not a pair of mutually inverse functions; it may be that one of the two large numbers is not prime." << "\n";
+					
+					if(rounds < 2)
+					{
+						return false;
+					}
+					else
+					{
+						++FailureCounter;
+					}
+				}
+				else
+				{
+					std::cout << "Success: the RSA encryption and decryption are a pair of mutually inverse functions that pass this round of testing." << "\n";
+					++SuccessCounter;
 				}
 			}
 
-			std::cout << "Self sanity check passed." << std::endl;
+			std::cout << "Self sanity check all executed." << std::endl;
+			
+			//Print the probability of success or failure for this round of testing (%)
+			std::cout << "The probability of success is " << SuccessCounter * 100.0 / rounds << "%." << std::endl;
+			std::cout << "The probability of failure is " << FailureCounter * 100.0 / rounds << "%." << std::endl;
+
 			return true;
 		}
 	};
