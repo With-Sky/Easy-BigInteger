@@ -40,7 +40,7 @@ namespace TwilightDream::CryptographyAsymmetric
 	std::optional<RSA::FindPrimeState> RSA::GeneratePrimesInParallelFunctions(size_t bit_count)
 	{
 		std::vector<std::future<void>> futures;
-		const size_t				   max_thread_count = std::thread::hardware_concurrency();
+		const size_t				   max_thread_count = 1;  //std::thread::hardware_concurrency();
 		std::vector<FindPrimeState>	   prime_map( max_thread_count, FindPrimeState() );
 
 		for ( size_t i = 0; i < prime_map.size(); ++i )
@@ -173,8 +173,13 @@ namespace TwilightDream::CryptographyAsymmetric
 		{
 			return;
 		}
-	
+		//std::cout << "---------------------------------\n";
+		//std::cout << PlainMessage.ToString( 10 ) << "\n";
+		//std::cout << EncryptExponent.ToString( 10 ) << "\n";
+		//std::cout << AlgorithmModulus.ToString( 10 ) << "\n";
 		PlainMessage.PowerWithModulo(EncryptExponent, AlgorithmModulus);
+		//std::cout << PlainMessage.ToString( 10 ) << "\n";
+		//std::cout << "---------------------------------\n";
 	}
 
 	void RSA::Decryption(BigInteger& CipherMessage, const BigInteger& DecryptExponent, const BigInteger& AlgorithmModulus )
@@ -183,7 +188,13 @@ namespace TwilightDream::CryptographyAsymmetric
 		{
 			return;
 		}
-	
+		//xstd::cout << "---------------------------------\n";
+		//xstd::cout << CipherMessage.ToString( 10 ) << "\n";
+		//xstd::cout << DecryptExponent.ToString( 10 ) << "\n";
+		//xstd::cout << AlgorithmModulus.ToString( 10 ) << "\n";
 		CipherMessage.PowerWithModulo(DecryptExponent, AlgorithmModulus);
+		//std::cout << CipherMessage.ToString( 10 ) << "\n";
+		//std::cout << "---------------------------------\n";
+
 	}
 }  // namespace TwilightDream::CryptographyAsymmetric

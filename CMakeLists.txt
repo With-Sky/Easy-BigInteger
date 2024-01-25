@@ -2,9 +2,8 @@
 # 项目特定的逻辑。
 #
 cmake_minimum_required (VERSION 3.8)
-
+#set(CMAKE_BUILD_TYPE release)
 project ("LargeDynamicBitSetAndIntegerNumber")
-
 # 设置默认的构建类型为 Debug，如果没有指定构建类型
 if(NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_CXX_STANDARD 17)
@@ -22,7 +21,7 @@ else()
 		if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11")
 			message(FATAL_ERROR "GNU CXX compiler version is too small !")
 		endif()
-		if(CMAKE_BUILD_TYPE EQUAL debug)
+		if(CMAKE_BUILD_TYPE EQUAL release)
 			add_compile_options(-Wall -Wextra -fsigned-char -finput-charset=UTF-8 -fexec-charset=UTF-8)
 		else()
 			add_compile_options(-g -Wall -Wextra -fsigned-char -finput-charset=UTF-8 -fexec-charset=UTF-8)

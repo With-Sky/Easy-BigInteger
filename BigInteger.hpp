@@ -33,6 +33,7 @@ namespace TwilightDream::BigInteger
 
 	// Set max binary bit count the values[index]
 	const uint16_t EXPONENT_VALUE = 32;
+	const uint16_t EXPONENT_FHT_UI16 = 16;
 	const uint16_t EXPONENT_VALUE2 = std::numeric_limits<digit_type>::digits / 2;
 	const uint16_t EXPONENT = EXPONENT_VALUE < EXPONENT_VALUE2 ? EXPONENT_VALUE : EXPONENT_VALUE2;
 
@@ -44,11 +45,12 @@ namespace TwilightDream::BigInteger
 	// 65536, 536870912, 2147483648, 4294967296, 18446744073709551616
 	const uint64_t BASE = digit_type(pow(2, EXPONENT));
 	
-	constexpr int KARATSUBA_LIMIT = 70;
-	constexpr int FHT_MAX_LIMIT = 7500;
-	constexpr int FHT_MIN_LIMIT = 150;
-	constexpr int BINARY_SEARCH_DIVISION_LIMIT = 4;
-	constexpr int DONALD_KNUTH_LONG_DIVISION_LIMIT = 20;
+	constexpr int BASE_MULTIPLY_LIMIT = 50; // 0-50 base
+	constexpr int KARATSUBA_MULTIPLY_LIMIT = 100; // 50-100 Karatsuba
+	constexpr int FHT_MULTIPLY_LIMIT = 65536; // 100 - 65536 FHT, 65536 - inf, Karatsuba
+	constexpr int BINARY_SEARCH_DIVISION_LIMIT = 4; //0-4 binary
+	constexpr int SHORT_DIVISION_LIMIT = 10;		// 4 - 10 short
+	constexpr int DONALD_KNUTH_LONG_DIVISION_LIMIT = 20;// 10 - 20 Knuth, Max of knuth, Min of Newton
 	constexpr int MULTI_THREAD_LIMIT = 10000;
 	constexpr bool MULTI_THREAD = true;
 	constexpr uint64_t STACK_LIMIT = 4096;
@@ -908,22 +910,26 @@ namespace TwilightDream::BigInteger
 			}
 			sign *= other.sign;
 
-			/*
-			if ( ( values.size() > FHT_MIN_LIMIT && other.values.size() > FHT_MIN_LIMIT ) && ( values.size() <= FHT_MAX_LIMIT && other.values.size() <= FHT_MAX_LIMIT ) )
+			if ( values.size() < BASE_MULTIPLY_LIMIT && other.values.size() < BASE_MULTIPLY_LIMIT )
+			{
+				return BaseMultiplication( other );
+			}
+			//else if ( values.size() < KARATSUBA_MULTIPLY_LIMIT && other.values.size() < KARATSUBA_MULTIPLY_LIMIT )
+			//{
+			//	std::cout << "KARA\n";
+			//	return KaratsubaMultiplication( other );
+			//}
+			else if ( values.size() < FHT_MULTIPLY_LIMIT && other.values.size() < FHT_MULTIPLY_LIMIT )
 			{
 				if ( *this == other )
 					return FHTSquare();
 				else
 					return FHTMultiplication( other );
 			}
-			*/
-			if ( ( values.size() > KARATSUBA_LIMIT && other.values.size() > KARATSUBA_LIMIT ) )
-			{
-				return KaratsubaMultiplication( other );
-			}
 			else 
 			{
-				return BaseMultiplication( other );
+				std::cout << "KARA\n";
+				return KaratsubaMultiplication( other );		
 			}
 		}
 
@@ -1169,6 +1175,61 @@ namespace TwilightDream::BigInteger
 			high.values = std::move( highValue );
 		}
 
+		BigInteger shiftr( int d ) const
+		{
+			if ( d >= Size() )
+				return 0;
+			BigInteger tmp;
+			tmp.values.assign( values.begin() + d, values.end() );	//shift d element, not bit
+			return tmp;
+		}
+		BigInteger shiftl( int d ) const
+		{
+			if ( *this == 0 )
+				return 0;
+			BigInteger tmp;
+			tmp.values.resize( d );
+			tmp.values.insert( tmp.values.end(), values.begin(), values.end() );
+			return tmp;
+		}
+		// Return BASE^n / *this
+		BigInteger Inv( size_t n ) const
+		{
+			if ( std::min( Size(), n - Size() ) <= 64 )
+			{
+				BigInteger a;
+				a.values.resize( n + 1 );
+				a.values[ n ] = 1;
+				return a.DonaldKnuthLongDivision(*this);	 // a / this
+			}
+			size_t	   l = Size();
+			size_t	   k = ( n - l + 5 ) >> 1, k2 = k > l ? 0 : l - k;
+			BigInteger x = shiftr( k2 );
+			size_t	   n2 = k + x.Size();
+			BigInteger y = x.Inv( n2 );
+			BigInteger a = y + y;
+			BigInteger b = ( *this ) * y * y;
+			return a.shiftl( n - n2 - k2 ) - b.shiftr( 2 * ( n2 + k2 ) - n ) - 1;
+		}
+		std::pair<BigInteger, BigInteger> div_newton_iter( const BigInteger& x ) const
+		{
+			if (*this < x)
+			{
+				return std::make_pair( BigInteger( 0 ), *this );
+			}
+			size_t	   l = Size(), lx = x.Size();
+			size_t	   k = l - lx + 5, k2 = k > lx ? 0 : lx - k;
+			BigInteger xx = x.shiftr( k2 );
+			if ( k2 != 0 )
+				xx += 1;
+			size_t	   n2 = k + xx.Size();
+			BigInteger u = ( *this ) * ( xx.Inv( n2 ) );
+			BigInteger q = u.shiftr( n2 + k2 );
+			BigInteger r = ( *this ) - q * x;
+			while ( r >= x )
+				q += 1, r -= x;
+			return { q, r };
+		}
 		// result = result.Power(exponent)
 		BigInteger& Power( const size_t exponent )
 		{
@@ -1490,7 +1551,7 @@ namespace TwilightDream::BigInteger
 			}
 
 			// Select division algorithm based on the size of the divisor
-			if (other.values.size() > BINARY_SEARCH_DIVISION_LIMIT)
+			if (other.values.size() < BINARY_SEARCH_DIVISION_LIMIT)
 			{
 				// Use BinarySearchDivision for large divisors
 				auto pair = BinarySearchDivision(other);
@@ -1502,25 +1563,36 @@ namespace TwilightDream::BigInteger
 				*this = pair.first;  // Update the current instance with the quotient
 				return *this;
 			}
-			else if (other.values.size() > DONALD_KNUTH_LONG_DIVISION_LIMIT)
-			{
-				// Use DonaldKnuthLongDivision for intermediate-sized divisors
-				return DonaldKnuthLongDivision(other, r);
-			}
-			else
+			else if (other.values.size() < SHORT_DIVISION_LIMIT)
 			{
 				//There are special cases where the computation fails using short division.
-				if(other.values[0] == 0)
+				if ( other.values[ 0 ] == 0 )
 				{
-					DonaldKnuthLongDivision(other, r);
+					DonaldKnuthLongDivision( other, r );
 					return *this;
 				}
-
 				// Use ShortDivision for small divisors
-				return ShortDivision(other, r);
+				return ShortDivision( other, r );
+				
+			}
+			else if ( other.values.size() < DONALD_KNUTH_LONG_DIVISION_LIMIT )
+			{
+				// Use DonaldKnuthLongDivision for intermediate-sized divisors
+				DonaldKnuthLongDivision(other, r);
+				return *this;
+			}
+			else 
+			{
+				// Use Newton iter for long-sized divisors
+				BigInteger copy( *this );
+				auto quot_rem = copy.div_newton_iter( other );
+				if ( r != nullptr )
+				{
+					*r = quot_rem.second;
+				}
+				return *this = quot_rem.first;
 			}
 		}
-
 
 		/**
 		 * @brief Performs division using binary search based on bit chunks.
@@ -3174,16 +3246,15 @@ namespace TwilightDream::BigInteger
 			}
 
 			BigInteger STRING_BASE = BigInteger( base_value );
+			BigInteger rem;
 			while ( !a.IsZero() )
 			{
-				// Calculate the current digit
-				uint64_t digit = ( a % STRING_BASE ).values[ 0 ];
+				// Calculate the current digit, divide the number in the current bit by 2 from a.
+				a.ShortDivision( STRING_BASE, &rem );
+				uint64_t digit = rem.values[ 0 ];
 				
 				// Convert digits(number) to characters
 				number_string += ( digit < 10 ? '0' + digit : 'A' + digit - 10 );
-
-				// Divide the number in the current bit by 2 from a.
-				a /= STRING_BASE;
 
 				// Update m for possible subsequent negative symbols
 				m++;
