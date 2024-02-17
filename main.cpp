@@ -1,60 +1,115 @@
 #include "BigInteger.hpp"
+#include "BigIntegerTest.hpp"
 #include "BigFraction.hpp"
 #include "BinaryCipherTest.hpp"
 #include "CryptographyAsymmetricKey.hpp"
+#include "HardPoly1305.hpp"
 
-auto main(int argument_cout, char* argument_vector[]) -> int
+#include <iomanip>
+#include <cassert>
+
+inline void test_negative_big_fraction()
 {
+	// Initialize a BigFraction with a negative fraction -3/7
+	TwilightDream::BigInteger::BigInteger numerator( 3 );	 // Positive numerator
+	TwilightDream::BigInteger::BigInteger denominator( 7 );	 // Positive denominator
+	int									  sign = -1;		 // Negative sign for the fraction
+
+	// Create the BigFraction with the negative sign
+	TwilightDream::BigFraction::BigFraction negativeFraction( numerator, denominator, sign );
+
+	// Set a very high precision denominator for the final value
+	TwilightDream::BigInteger::BigInteger FullPrecision(
+		"1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 
+		10
+	);
+	negativeFraction.SetFullPrecision(FullPrecision);
+
+	// Output the fraction to check initialization
+	std::cout << "Negative fraction (-3/7): " << negativeFraction << std::endl;
+
+	// Perform operations on the negative fraction
+	std::cout << "Negative fraction squared: " << negativeFraction.Power( 2 ) << std::endl;
+	std::cout << "Square root of the negative fraction: " << negativeFraction.Sqrt() << std::endl;  // Should handle or raise an error if negative
+	std::cout << "Negative fraction multiplied by 2/3: " << ( negativeFraction * TwilightDream::BigFraction::BigFraction( TwilightDream::BigInteger::BigInteger( 2 ), TwilightDream::BigInteger::BigInteger( 3 ), 1 ) ) << std::endl;
+
+	// Check inversion (should handle the sign correctly)
+	std::cout << "Reciprocal negative fraction: " << negativeFraction.Reciprocal() << std::endl;
+}
+
+auto main( int argument_cout, char* argument_vector[] ) -> int
+{
+	//TEST PASSED
+	/*TwilightDream::BigInteger::BigInteger TestNumber( "123456789", 10 );
+	TwilightDream::BigInteger::BigInteger TestNumberPower = TwilightDream::BigInteger::BigInteger( TestNumber ).Power( 14 );
+	TwilightDream::BigInteger::ShiftingKthRoot kthRootCalculator( 14 );
+	TwilightDream::BigInteger::BigInteger	   TestNumberKthRoot = kthRootCalculator( TestNumberPower );
+	if ( TestNumberKthRoot == TestNumber )
+	{
+		std::cout << "True" << std::endl;
+	}
+	else
+	{
+		std::cout << "False" << std::endl;
+	}*/
+
+	//TEST PASSED
+	/*auto pi = TwilightDream::BigFraction::BigFraction::GenerateSrinivasaRamanujanPI();
+	pi.PrecisionMode = TwilightDream::BigFraction::DecimalPrecisionMode::Fixed;
+	pi.FixedPrecisionCount = 10000;
+	std::cout << pi << std::endl;*/
+
+	//TEST PASSED
+	//std::cout << TwilightDream::BigInteger::BigInteger::Factorial(10000).ToString(10) << std::endl;
+	
+	//test_negative_big_fraction();
+
+	TwilightDream::BigFraction::BigFraction TestBigFraction(12,48);
+	TestBigFraction.PrecisionMode = TwilightDream::BigFraction::DecimalPrecisionMode::Fixed;
+	TestBigFraction.FixedPrecisionCount = 100;
+	std::cout << TestBigFraction.Power(3) << std::endl;
+	std::cout << TestBigFraction.Power(TwilightDream::BigFraction::BigFraction(1, 4)) << std::endl;
+	std::cout << TestBigFraction.Sqrt() << std::endl;
+	std::cout << TestBigFraction.Cbrt() << std::endl;
+	std::cout << TestBigFraction.Log() << std::endl;
+	std::cout << TestBigFraction.Log10() << std::endl;
+	//FIXME
+	std::cout << TestBigFraction.NthRoot(4) << std::endl;
+
+	TestBigFraction.PrecisionMode = TwilightDream::BigFraction::DecimalPrecisionMode::Full;
+	TwilightDream::BigInteger::BigInteger FullPrecision("1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", 10);
+	TestBigFraction.SetFullPrecision(FullPrecision);
+	std::cout << TestBigFraction.Power(3) << std::endl;
+	std::cout << TestBigFraction.Sqrt() << std::endl;
+	std::cout << TestBigFraction.Cbrt() << std::endl;
+	std::cout << TestBigFraction.Log() << std::endl;
+	std::cout << TestBigFraction.Log10() << std::endl;
+	//FIXME
+	std::cout << TestBigFraction.NthRoot(4) << std::endl;
+	
+	TwilightDream::BigInteger::Test::test_all();
+	TwilightDream::BigInteger::Test::test_custom_data();
+
+	using PrimeNumberTester = TwilightDream::PrimeNumberTester;
 	using BigInteger = TwilightDream::BigInteger::BigInteger;
 
 	//BigInteger BigPrime(std::string("16158503035655503650357438344334975980222051334857742016065172713762327569433945446598600705761456731844358980460949009747059779575245460547544076193224141560315438683650498045875098875194826053398028819192033784138396109321309878080919047169238085235290822926018152521443787945770532904303776199561965192760957166694834171210342487393282284747428088017663161029038902829665513096354230157075129296432088558362971801859230928678799175576150822952201848806616643615613562842355410104862578550863465661734839271290328348967522998634176499319107762583194718667771801067716614802322659239302476074096777926805529798115243"), 10);
-	//BigInteger::IsPrime(BigPrime);
+	//PrimeNumberTester NumberTester;
+	//std::cout << std::boolalpha << NumberTester.IsPrime(BigPrime) << std::endl;
 
-	TwilightDream::CryptographyAsymmetric::RSA::SelfSanityCheck(4096, 10);
-	//
-	////AllTestBitset();
-	//
-	////11111111111111111111111111111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001100100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001100100
-	////BigInteger BigIntA(std::string("2135987035920910082279229616932235919179133537347964862161828096540766854433857887501402599587940"), 10);
-	////std::cout << (BigIntA).ToString(10) << '\n';
-	//
-	////110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
-	////BigInteger BigIntB(std::string("347376267711948586270712955026063723560490518730763569045299501238602925342721"), 10);
-	////std::cout << (BigIntB).ToString(10) << '\n';
-	//
-	//BigInteger BigInt(std::string("110111000011011101100110101010000000011101000100010000110101011101010010111101001100001011111011100110101001011111100111111100101001010000110001101101100110011100100111000101010101101101100011000000101100010000100101101110101100110001001100011110101000010100010000010001111101110000001001010001110011000001010110010010110000100101010001001010000011111111010111001111001001111100110110011111001001111100000110011110101000001100010001011100"), 2);
-	//
-	////110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
-	//BigInteger BigInt2(std::string("10011011100011001110100001101001001110010110100010011000111011010011001110111010011001101000010001111000011000110011000101001011000000101000001110101100100010100001001010000001110101101001110000111011100010011110110000010111101010010110100110010110111000100000101111010001011001000000111010100110101011111001010100111110111001010110001001100101001100010111001"), 2);
-	//std::cout << (BigInt).ToString(10) << '\n';
-	//std::cout << (BigInt2).ToString(10) << '\n';
-	//
-	//BigInteger BigInt3 = BigInt * BigInt2;
-	//std::cout << (BigInt3).ToString(10) << '\n';
-	//
-	////BigInteger BigInt4 = 1;
-	////std::cout << (BigInt4).ToString(10) << '\n';
-	////std::cout << (BigInt4 << 65).ToString(10) << '\n';
-	////std::cout << (BigInt4 >> 65).ToString(10) << '\n';
-	//
-	////BigInteger BigInt5 = BigInt3 / BigInt2;
-	////std::cout << (BigInt5).ToString(10) << '\n';
-	////BigInt5 = BigInt3 % BigInt2;
-	////std::cout << (BigInt5).ToString(10) << '\n';
-	//
-	//BinaryCipher BinaryCipherInstance;
-	//BinaryCipherInstance.Test();
-	//
-	//BinaryCipherNaive BinaryCipherNaiveInstance;
-	//BinaryCipherNaiveInstance.Test();
-	//BigInteger a( std::string( "92954886144272226508422748985607494822242113154824437401078813385042747067949901651859860368479946491674170000083080144025161531256342758941494917460364850842091578133853999005335255292965596157173040641254113537583491914908827048992208092284195345255689479473817674543987000932406261587307300676405578662323" ), 10 );
-	//BigInteger b( std::string( "74599219686668942090095870109335690314480457073999460384973076000247479516254955413312224508592790190766740201259197024116492017287848645291084146353750772548897036470406856197137684790343100646496555827510193973380498788840557141041907869129507287348725651090443374888946529531808156214673179460491863894899" ), 10 );
-	//BigInteger c( std::string( "149198439373337884180191740218671380628960914147998920769946152000494959032509910826624449017185580381533480402518394048232984034575697290582168292707501545097794072940813712394275369580686201292993111655020387946760997577681114282083815738259014574697451302180886749777893059063616312429346358920983727789799" ), 10 );
-	//auto t1 = std::chrono::steady_clock::now();
-	//a = a.PowerWithModulo( b, c );
-	//auto t2 = std::chrono::steady_clock::now();
-	//auto us = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
-	//std::cout << a.ToString( 10 ) << "\n";
-	//std::cout << us << "us\n";
+	//TEST PASSED
+	//TwilightDream::CryptographyAsymmetric::RSA::SelfSanityCheck(4096, 10);
+
+	BinaryCipher BinaryCipherInstance;
+	BinaryCipherInstance.Test();
+	
+	BinaryCipherNaive BinaryCipherNaiveInstance;
+	BinaryCipherNaiveInstance.Test();
+
+	//大整数应该不会计算错误。因为已经全部都测试过了。那唯一可能的是我算法写错了，或者还有什么我们的别的不知道的原因
+	//Large integers shouldn't be miscalculated. That's because it's all been tested. So the only possibility is that I wrote the algorithm wrong, or something else we don't know.
+	//2020-08-25 Updated: Fixed
+	test_hard_poly1305();
+
 	return 0;
 }

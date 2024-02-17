@@ -25,9 +25,9 @@ else()
 			message(FATAL_ERROR "GNU CXX compiler version is too small !")
 		endif()
 		if(CMAKE_BUILD_TYPE EQUAL release)
-			add_compile_options(-Wall -Wextra -fsigned-char -finput-charset=UTF-8 -fexec-charset=UTF-8)
+			add_compile_options(-Wall -O2 -Wextra -fsigned-char -finput-charset=UTF-8 -fexec-charset=UTF-8)
 		else()
-			add_compile_options(-g -Wall -Wextra -fsigned-char -finput-charset=UTF-8 -fexec-charset=UTF-8)
+			add_compile_options(-g -O0 -Wall -Wextra -fsigned-char -finput-charset=UTF-8 -fexec-charset=UTF-8)
 		endif()
 	endif()
 endif()
@@ -36,14 +36,15 @@ add_library(BigNumberSystem
 	BigInteger.hpp
 	BigInteger.cpp
 	BigFraction.hpp
+	BigFraction.cpp
 	PrimeNumberTester.hpp
 	PrimeNumberTester.cpp
-)
+ )
 
 add_library(CryptographySymmetricKey
 	BinaryCipherTest.hpp
 	BinaryCipherTest.cpp
-)
+ "HardPoly1305.cpp")
 target_link_libraries(CryptographySymmetricKey PRIVATE BigNumberSystem)
 
 add_library(CryptographyAsymmetricKey
@@ -52,7 +53,11 @@ add_library(CryptographyAsymmetricKey
 )
 target_link_libraries(CryptographyAsymmetricKey PRIVATE BigNumberSystem)
 
-add_executable(TestCryptography main.cpp)
+add_executable(TestCryptography
+	BigIntegerTest.hpp
+	BigIntegerTest.cpp
+	main.cpp
+)
 target_link_libraries(TestCryptography PRIVATE CryptographySymmetricKey CryptographyAsymmetricKey)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
