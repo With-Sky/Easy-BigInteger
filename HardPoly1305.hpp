@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2024 Twilight-Dream & With-Sky
+Copyright (c) 2024-2050 Twilight-Dream & With-Sky
 
 https://github.com/Twilight-Dream-Of-Magic/
 https://github.com/With-Sky

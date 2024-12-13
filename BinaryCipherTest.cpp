@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2024 Twilight-Dream & With-Sky
+Copyright (c) 2024-2050 Twilight-Dream & With-Sky
 
 https://github.com/Twilight-Dream-Of-Magic/
 https://github.com/With-Sky
@@ -308,14 +308,14 @@ void BinaryCipher::KeyExpansion( const BigInteger& BitsKey, BigInteger& BitsExpa
 
 	for ( int round = 16; round > 0; round-- )
 	{
-		Random0 = BigInteger::BitRotateRight(TemporaryState, 314, 512);
-		Random1 = BigInteger::BitRotateLeft(TemporaryState, 248, 512);
-		Random2 = BigInteger::BitRotateLeft(TemporaryState, 88, 512);
-		Random3 = BigInteger::BitRotateRight(TemporaryState, 358, 512);
-		Random4 = BigInteger::BitRotateLeft(TemporaryState, 142, 512);
-		Random5 = BigInteger::BitRotateRight(TemporaryState, 500, 512);
-		Random6 = BigInteger::BitRotateRight(TemporaryState, 204, 512);
-		Random7 = BigInteger::BitRotateLeft(TemporaryState, 394, 512);
+		Random0 = BigInteger::BitRotateRight(Random0 | ~TemporaryState, 314, 512); //NOT-OR Gate
+		Random1 = BigInteger::BitRotateLeft(Random1 | ~TemporaryState, 248, 512); //NOT-OR Gate
+		Random2 = BigInteger::BitRotateLeft(Random2 | ~TemporaryState, 88, 512); //NOT-OR Gate
+		Random3 = BigInteger::BitRotateRight(Random3 ^ TemporaryState, 358, 512);
+		Random4 = BigInteger::BitRotateLeft(Random4 ^ TemporaryState, 142, 512);
+		Random5 = BigInteger::BitRotateRight(~Random5 & TemporaryState, 500, 512); //NOT-AND Gate
+		Random6 = BigInteger::BitRotateRight(~Random6 & TemporaryState, 204, 512); //NOT-AND Gate
+		Random7 = BigInteger::BitRotateLeft(~Random7 & TemporaryState, 394, 512); //NOT-AND Gate
 
 		RandomA = Random0 ^ Random5;
 		RandomB = BigInteger::BitRotateRight(( Random1 ^ Random7 ), 7, 512);
@@ -399,6 +399,30 @@ std::bitset<512> AdditionBits512( const std::bitset<512>& a, const std::bitset<5
 		}
 	}
 	return sum;
+}
+
+// Function to rotate left by 'k' bits
+template <std::size_t BITSET_SIZE>
+std::bitset<BITSET_SIZE> BitRotateLeft( const std::bitset<BITSET_SIZE>& bs, size_t k )
+{
+	k %= BITSET_SIZE;  // Ensure k is within [0, 511]
+	if ( k == 0 )
+		return bs;
+
+	// Perform left rotation: (bs << k) | (bs >> (BITSET_SIZE - k))
+	return ( bs << k ) | ( bs >> ( BITSET_SIZE - k ) );
+}
+
+// Function to rotate right by 'k' bits
+template <std::size_t BITSET_SIZE>
+std::bitset<BITSET_SIZE> BitRotateRight( const std::bitset<BITSET_SIZE>& bs, size_t k )
+{
+	k %= BITSET_SIZE;  // Ensure k is within [0, 511]
+	if ( k == 0 )
+		return bs;
+
+	// Perform right rotation: (bs >> k) | (bs << (BITSET_SIZE - k))
+	return ( bs >> k ) | ( bs << ( BITSET_SIZE - k ) );
 }
 
 void BinaryCipherNaive::InitialWithKey( std::vector<uint8_t> Keys )
@@ -633,14 +657,14 @@ void BinaryCipherNaive::KeyExpansion( const std::bitset<256>& BitsKey, std::bits
 		std::cout << "Round: " << round << std::endl;
 #endif
 
-		RandomBits0 = ( TemporaryState >> 314 ) | ( TemporaryState << 512 - 314 );
-		RandomBits1 = ( TemporaryState << 248 ) | ( TemporaryState >> 512 - 248 );
-		RandomBits2 = ( TemporaryState << 88 ) | ( TemporaryState >> 512 - 88 );
-		RandomBits3 = ( TemporaryState >> 358 ) | ( TemporaryState << 512 - 358 );
-		RandomBits4 = ( TemporaryState << 142 ) | ( TemporaryState >> 512 - 142 );
-		RandomBits5 = ( TemporaryState >> 500 ) | ( TemporaryState << 512 - 500 );
-		RandomBits6 = ( TemporaryState >> 204 ) | ( TemporaryState << 512 - 204 );
-		RandomBits7 = ( TemporaryState << 394 ) | ( TemporaryState >> 512 - 394 );
+		RandomBits0 = BitRotateRight<512>(RandomBits0 | ~TemporaryState, 314); //NOT-OR Gate
+		RandomBits1 = BitRotateLeft<512>(RandomBits1 | ~TemporaryState, 248); //NOT-OR Gate
+		RandomBits2 = BitRotateLeft<512>(RandomBits2 | ~TemporaryState, 88); //NOT-OR Gate
+		RandomBits3 = BitRotateRight<512>(RandomBits3 ^ TemporaryState, 358);
+		RandomBits4 = BitRotateLeft<512>(RandomBits4 ^ TemporaryState, 142);
+		RandomBits5 = BitRotateRight<512>(~RandomBits5 & TemporaryState, 500); //NOT-AND Gate
+		RandomBits6 = BitRotateRight<512>(~RandomBits6 & TemporaryState, 204); //NOT-AND Gate
+		RandomBits7 = BitRotateLeft<512>(~RandomBits7 & TemporaryState, 394); //NOT-AND Gate
 
 #if defined( DEBUG )
 		std::cout << "Initial Random Bits:" << '\n';
