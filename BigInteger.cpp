@@ -335,7 +335,8 @@ namespace TwilightDream::BigInteger
 			return AddMultiplyNumber( 0, other.values[ 0 ] );
 		}
 		values.resize( this_len + other_len );
-		HyperInt::Arithmetic::multiplier( values.data(), this_len, other.values.data(), other_len, values.data() );
+		auto& multiplier = HyperInt::Arithmetic::getMultiplier();
+		multiplier( values.data(), this_len, other.values.data(), other_len, values.data() );
 		Clean();
 		return *this;
 	}
@@ -1568,7 +1569,7 @@ namespace TwilightDream::BigInteger
 		return uint_data;
 	}
 
-	BigSignedInteger BigSignedInteger::Abs()
+	BigSignedInteger BigSignedInteger::Abs() const
 	{
 		if ( this->sign == true )
 		{

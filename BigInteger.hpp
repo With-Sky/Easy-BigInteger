@@ -756,7 +756,7 @@ namespace TwilightDream::BigInteger
 
 		operator BigInteger() const;
 
-		BigSignedInteger Abs();
+		BigSignedInteger Abs() const;
 
 		bool IsZero() const;
 

@@ -2063,9 +2063,16 @@ namespace HyperInt
 			MulFuncVector mul_funcs;
 			CplxFuncVector cplx_funcs;
 		};
-		static const MultiplicationSelector::MulFuncVector mul_funcs({abs_mul64_karatsuba, abs_mul64_ntt});
-		static const MultiplicationSelector::CplxFuncVector cplx_funcs({mul_karatsuba_complexity, mul_ntt_complexity});
-		static const MultiplicationSelector multiplier(mul_funcs, cplx_funcs);
+		
+		// 使用 Meyers Singleton 模式，通过将静态变量包装在函数内部，确保它们在第一次使用时初始化
+		inline const MultiplicationSelector& getMultiplier()
+		{
+			static const MultiplicationSelector::MulFuncVector mul_funcs = { abs_mul64_karatsuba, abs_mul64_ntt };
+			static const MultiplicationSelector::CplxFuncVector cplx_funcs = { mul_karatsuba_complexity, mul_ntt_complexity };
+			static const MultiplicationSelector multiplier(mul_funcs, cplx_funcs);
+			return multiplier;
+		}
+
 
 		/// @brief 2^64 base long integer multiply 64bit number, add another 64bit number to product.
 		/// @param in Input long integer.
