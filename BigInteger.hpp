@@ -39,8 +39,8 @@ SOFTWARE.
 #include <vector>
 #include <map>
 #include <unordered_map>
-#include <thread>
 #include <complex>
+#include <optional>
 #include <functional>
 #include <type_traits>
 #include <random>
@@ -634,38 +634,43 @@ namespace TwilightDream::BigInteger
 
 		friend class HashFunction;
 
-		friend BigInteger operator+( const BigInteger& lhs, const BigInteger& rhs )
+		// 加法运算符重载
+		BigInteger operator+(const BigInteger& other) const
 		{
-			BigInteger result( lhs );
-			result += rhs;
+			BigInteger result(*this);
+			result += other;
 			return result;
 		}
 
-		friend BigInteger operator-( const BigInteger& lhs, const BigInteger& rhs )
+		// 减法运算符重载
+		BigInteger operator-(const BigInteger& other) const
 		{
-			BigInteger result( lhs );
-			result -= rhs;
+			BigInteger result(*this);
+			result -= other;
 			return result;
 		}
 
-		friend BigInteger operator*( const BigInteger& lhs, const BigInteger& rhs )
+		// 乘法运算符重载
+		BigInteger operator*(const BigInteger& other) const
 		{
-			BigInteger result( lhs );
-			result *= rhs;
+			BigInteger result(*this);
+			result *= other;
 			return result;
 		}
 
-		friend BigInteger operator/( const BigInteger& lhs, const BigInteger& rhs )
+		// 除法运算符重载
+		BigInteger operator/(const BigInteger& other) const
 		{
-			BigInteger result( lhs );
-			result /= rhs;
+			BigInteger result(*this);
+			result /= other;
 			return result;
 		}
 
-		friend BigInteger operator%( const BigInteger& lhs, const BigInteger& rhs )
+		// 取模运算符重载
+		BigInteger operator%(const BigInteger& other) const
 		{
-			BigInteger result( lhs );
-			result %= rhs;
+			BigInteger result(*this);
+			result %= other;
 			return result;
 		}
 
@@ -690,34 +695,40 @@ namespace TwilightDream::BigInteger
 			return 0;
 		}
 
-		friend bool operator==( const BigInteger& lhs, const BigInteger& rhs )
+		// 等于运算符重载
+		bool operator==(const BigInteger& other) const
 		{
-			return compare( lhs, rhs ) == 0;
+			return compare(*this, other) == 0;
 		}
 
-		friend bool operator!=( const BigInteger& lhs, const BigInteger& rhs )
+		// 不等于运算符重载
+		bool operator!=(const BigInteger& other) const
 		{
-			return !( lhs == rhs );
+			return !(*this == other);
 		}
 
-		friend bool operator>( const BigInteger& lhs, const BigInteger& rhs )
+		// 大于运算符重载
+		bool operator>(const BigInteger& other) const
 		{
-			return compare( lhs, rhs ) > 0;
+			return compare(*this, other) > 0;
 		}
 
-		friend bool operator>=( const BigInteger& lhs, const BigInteger& rhs )
+		// 大于等于运算符重载
+		bool operator>=(const BigInteger& other) const
 		{
-			return compare( lhs, rhs ) >= 0;
+			return compare(*this, other) >= 0;
 		}
 
-		friend bool operator<( const BigInteger& lhs, const BigInteger& rhs )
+		// 小于运算符重载
+		bool operator<(const BigInteger& other) const
 		{
-			return compare( lhs, rhs ) < 0;
+			return compare(*this, other) < 0;
 		}
 
-		friend bool operator<=( const BigInteger& lhs, const BigInteger& rhs )
+		// 小于等于运算符重载
+		bool operator<=(const BigInteger& other) const
 		{
-			return compare( lhs, rhs ) <= 0;
+			return compare(*this, other) <= 0;
 		}
 	};
 

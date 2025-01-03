@@ -2008,10 +2008,10 @@ namespace TwilightDream::BigInteger
 		case ArithmeticMode::Division:
 			if ( !b.IsZero() )
 			{
-				BigSignedInteger inverse = BigSignedInteger::ModuloInverse( b, modulus );
-				if ( !inverse.IsZero() )
+				BigSignedInteger compute_inverse = BigSignedInteger::ModuloInverse( b, modulus );
+				if ( !compute_inverse.IsZero() )
 				{
-					temporary = a * inverse;
+					temporary = a * compute_inverse;
 				}
 				else
 				{

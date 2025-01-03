@@ -59,16 +59,18 @@ namespace TwilightDream::BigFraction
 		BigFraction( BigFraction&& other ) noexcept;
 		explicit BigFraction( const BigInteger& numerator );
 		BigFraction( const BigInteger& numerator, const BigInteger& denominator );
-		BigFraction( const BigInteger& numerator, const BigInteger& denominator, int sign );
+		BigFraction( const BigInteger& numerator, const BigInteger& denominator, int32_t sign );
 		explicit BigFraction( const std::string& complexString );
 
 		void	   SetSimplifyReduced( bool value );
 		bool	   IsNaN() const;
-		bool	   IsInfinity() const;
+		bool	   IsInfinityPoint() const;
 		bool	   IsZero() const;
 		bool	   IsNegative() const;
+		bool	   IsInteger() const;
 		BigInteger GetNumerator() const;
 		BigInteger GetDenominator() const;
+		std::optional<BigInteger> TryGetInteger() const;
 		void	   SetNumerator( const BigInteger& number );
 		void	   SetDenominator( const BigInteger& number );
 		BigFraction GetFullPrecision() const;
@@ -214,7 +216,6 @@ namespace TwilightDream::BigFraction
 		operator double() const;
 		operator float() const;
 
-		static bool IsPerfectPower( const BigInteger& N );
 		static BigFraction GenerateSrinivasaRamanujanPI();
 		static BigFraction GenerateNilakanthaArrayPI( uint64_t iteration );
 		static BigFraction Exp( const BigInteger& value, DecimalPrecisionMode precision_mode = DecimalPrecisionMode::Full, uint64_t fixed_precision_count = 2 );

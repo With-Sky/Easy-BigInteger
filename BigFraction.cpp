@@ -29,6 +29,9 @@ SOFTWARE.
 
 namespace TwilightDream::BigFraction
 {
+	using BigInteger = TwilightDream::BigInteger::BigInteger;
+	using BigSignedInteger = TwilightDream::BigInteger::BigSignedInteger;
+
 	BigFraction::BigFraction() : numerator( 0 ), denominator( 1 ), sign( 1 ) {}
 
 	BigFraction::BigFraction( const BigFraction& other ) noexcept
@@ -86,7 +89,7 @@ namespace TwilightDream::BigFraction
 		return false;
 	}
 
-	bool BigFraction::IsInfinity() const
+	bool BigFraction::IsInfinityPoint() const
 	{
 		if ( !numerator.IsZero() && denominator.IsZero() )
 		{
@@ -106,6 +109,14 @@ namespace TwilightDream::BigFraction
 		return sign == -1;
 	}
 
+	bool BigFraction::IsInteger() const
+	{
+		BigFraction copy = *this;
+		copy.ReduceSimplify();
+
+		return copy.numerator == 1;
+	}
+
 	BigFraction::BigInteger BigFraction::GetNumerator() const
 	{
 		return numerator;
@@ -114,6 +125,15 @@ namespace TwilightDream::BigFraction
 	BigFraction::BigInteger BigFraction::GetDenominator() const
 	{
 		return denominator;
+	}
+
+	std::optional<BigInteger> BigFraction::TryGetInteger() const
+	{
+		if (IsInteger())
+		{
+			return numerator;
+		}
+		return std::nullopt;
 	}
 
 	void BigFraction::SetNumerator( const BigInteger& number )
@@ -1497,18 +1517,14 @@ namespace TwilightDream::BigFraction
 
 	BigFraction::BigInteger BigFraction::Floor() const
 	{
-		if ( IsNaN() )
-		{
-			return BigInteger( 0 );
-		}
-		else if ( IsZero() )
+		if ( IsNaN() || IsZero() )
 		{
 			return BigInteger( 0 );
 		}
 		else
 		{
 			BigInteger result = ( numerator * sign ) / denominator;
-			if ( sign == -1 )
+			if ( sign == -1 && (numerator * sign) % denominator != 0 )
 			{
 				result -= 1;
 			}
@@ -1518,18 +1534,14 @@ namespace TwilightDream::BigFraction
 
 	BigFraction::BigInteger BigFraction::Ceil() const
 	{
-		if ( IsNaN() )
-		{
-			return BigInteger( 0 );
-		}
-		else if ( IsZero() )
+		if ( IsNaN() || IsZero() )
 		{
 			return BigInteger( 0 );
 		}
 		else
 		{
 			BigInteger result = ( numerator * sign ) / denominator;
-			if ( sign == 1 )
+			if ( sign == 1 && (numerator * sign) % denominator != 0 )
 			{
 				result += 1;
 			}
@@ -1606,26 +1618,6 @@ namespace TwilightDream::BigFraction
 	BigFraction::operator float() const
 	{
 		return static_cast<float>( static_cast<long double>( *this ) );
-	}
-
-	bool BigFraction::IsPerfectPower( const BigInteger& N )
-	{
-		if ( N <= 1 )
-			return false;
-
-		for ( BigInteger b = TWO; b < N.Log2() + 1; ++b )
-		{
-			BigFraction exponent( 1, b, 1 );
-			BigFraction base( N, 1, 1 );
-			BigFraction a = base.Power( exponent );
-
-			if ( !a.IsNaN() )
-			{
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	std::istream& operator>>( std::istream& is, BigFraction& fraction )
