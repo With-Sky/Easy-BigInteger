@@ -37,17 +37,18 @@ SOFTWARE.
 #include <vector>
 #include <type_traits>
 #include <random>
+#include <cassert>
 
 // Windows 64bit fast multiply macro.
-#if defined(_WIN64)
+#if defined( _WIN64 )
 #include <intrin.h>
 #define UMUL128
-#endif //_WIN64
+#endif	//_WIN64
 
 // GCC 64bit fast multiply macro.
-#if defined(__SIZEOF_INT128__)
+#if defined( __SIZEOF_INT128__ )
 #define UINT128T
-#endif //__SIZEOF_INT128__
+#endif	//__SIZEOF_INT128__
 
 namespace HyperInt
 {
@@ -64,7 +65,7 @@ namespace HyperInt
 	constexpr int hint_clz(IntTy x)
 	{
 		constexpr uint32_t MASK32 = uint32_t(0xFFFF) << 16;
-		int res = sizeof(IntTy) * CHAR_BIT;
+		int				   res = sizeof(IntTy) * CHAR_BIT;
 		if (x & MASK32)
 		{
 			res -= 16;
@@ -219,7 +220,7 @@ namespace HyperInt
 
 	// x + y = sum with carry
 	template <typename UintTy>
-	constexpr UintTy add_half(UintTy x, UintTy y, bool &cf)
+	constexpr UintTy add_half(UintTy x, UintTy y, bool& cf)
 	{
 		x = x + y;
 		cf = (x < y);
@@ -228,7 +229,7 @@ namespace HyperInt
 
 	// x - y = diff with borrow
 	template <typename UintTy>
-	constexpr UintTy sub_half(UintTy x, UintTy y, bool &bf)
+	constexpr UintTy sub_half(UintTy x, UintTy y, bool& bf)
 	{
 		y = x - y;
 		bf = (y > x);
@@ -237,29 +238,29 @@ namespace HyperInt
 
 	// x + y + cf = sum with carry
 	template <typename UintTy>
-	constexpr UintTy add_carry(UintTy x, UintTy y, bool &cf)
+	constexpr UintTy add_carry(UintTy x, UintTy y, bool& cf)
 	{
 		UintTy sum = x + cf;
 		cf = (sum < x);
-		sum += y;			 // carry
-		cf = cf || (sum < y); // carry
+		sum += y;				 // carry
+		cf = cf || (sum < y);	 // carry
 		return sum;
 	}
 
 	// x - y - bf = diff with borrow
 	template <typename UintTy>
-	constexpr UintTy sub_borrow(UintTy x, UintTy y, bool &bf)
+	constexpr UintTy sub_borrow(UintTy x, UintTy y, bool& bf)
 	{
 		UintTy diff = x - bf;
 		bf = (diff > x);
-		y = diff - y;		  // borrow
-		bf = bf || (y > diff); // borrow
+		y = diff - y;			  // borrow
+		bf = bf || (y > diff);  // borrow
 		return y;
 	}
 
 	// a * x + b * y = gcd(a,b)
 	template <typename IntTy>
-	constexpr IntTy exgcd(IntTy a, IntTy b, IntTy &x, IntTy &y)
+	constexpr IntTy exgcd(IntTy a, IntTy b, IntTy& x, IntTy& y)
 	{
 		if (b == 0)
 		{
@@ -295,7 +296,7 @@ namespace HyperInt
 	constexpr uint64_t inv_mod2pow(uint64_t n, int pow)
 	{
 		const uint64_t mask = all_one<uint64_t>(pow);
-		uint64_t xn = 1, t = n & mask;
+		uint64_t	   xn = 1, t = n & mask;
 		while (t != 1)
 		{
 			xn = (xn * (2 - t));
@@ -306,7 +307,7 @@ namespace HyperInt
 
 	// Compute Integer multiplication, 64bit x 64bit to 128bit, basic algorithm
 	// first is low 64bit, second is high 64bit
-	constexpr std::pair<uint64_t, uint64_t> mul64x64to128_base(uint64_t a, uint64_t b)
+	constexpr void mul64x64to128_base(uint64_t a, uint64_t b, uint64_t& low, uint64_t& high)
 	{
 		uint64_t ah = a >> 32, bh = b >> 32;
 		a = uint32_t(a), b = uint32_t(b);
@@ -315,32 +316,31 @@ namespace HyperInt
 		r1 = uint32_t(r1), r2 = uint32_t(r2);
 		r1 += r2;
 		r1 += (r0 >> 32);
-		r3 += (r1 >> 32);
-		r0 = (r1 << 32) | uint32_t(r0);
-		return std::make_pair(r0, r3);
+		high = r3 + (r1 >> 32);
+		low = (r1 << 32) | uint32_t(r0);
 	}
 
-	inline std::pair<uint64_t, uint64_t> mul64x64to128(uint64_t a, uint64_t b)
+	inline void mul64x64to128(uint64_t a, uint64_t b, uint64_t& low, uint64_t& high)
 	{
-#if defined(UMUL128)
-#pragma message("Using _umul128 to compute 64bit x 64bit to 128bit")
-		unsigned long long low, high;
-		low = _umul128(a, b, &high);
-		return std::make_pair(low, high);
+#if defined( UMUL128 )
+#pragma message( "Using _umul128 to compute 64bit x 64bit to 128bit" )
+		unsigned long long lo, hi;
+		lo = _umul128(a, b, &hi);
+		low = lo, high = hi;
 #else
-#if defined(UINT128T) // No _umul128
-#pragma message("Using __uint128_t to compute 64bit x 64bit to 128bit")
+#if defined( UINT128T )	 // No _umul128
+#pragma message( "Using __uint128_t to compute 64bit x 64bit to 128bit" )
 		__uint128_t x(a);
 		x *= b;
-		return std::make_pair(uint64_t(x), uint64_t(x >> 64));
-#else // No __uint128_t
-#pragma message("Using basic function to compute 64bit x 64bit to 128bit")
-		return mul64x64to128_base(a, b);
-#endif // UINT128T
-#endif // UMUL128
+		low = uint64_t(x), high = uint64_t(x >> 64);
+#else  // No __uint128_t
+#pragma message( "Using basic function to compute 64bit x 64bit to 128bit" )
+		mul64x64to128_base(a, b, low, high);
+#endif	// UINT128T
+#endif	// UMUL128
 	}
 
-	constexpr uint32_t div128by32(uint64_t &dividend_hi64, uint64_t &dividend_lo64, uint32_t divisor)
+	constexpr uint32_t div128by32(uint64_t& dividend_hi64, uint64_t& dividend_lo64, uint32_t divisor)
 	{
 		uint32_t quot_hi32 = 0, quot_lo32 = 0;
 		uint64_t dividend = dividend_hi64 >> 32;
@@ -364,7 +364,7 @@ namespace HyperInt
 	}
 
 	// 96bit integer divided by 64bit integer, input make sure the quotient smaller than 2^32.
-	constexpr uint32_t div96by64to32(uint32_t dividend_hi32, uint64_t &dividend_lo64, uint64_t divisor)
+	constexpr uint32_t div96by64to32(uint32_t dividend_hi32, uint64_t& dividend_lo64, uint64_t divisor)
 	{
 		if (0 == dividend_hi32)
 		{
@@ -399,13 +399,13 @@ namespace HyperInt
 	}
 
 	// 128bit integer divided by 64bit integer, input make sure the quotient smaller than 2^64.
-	constexpr uint64_t div128by64to64(uint64_t dividend_hi64, uint64_t &dividend_lo64, uint64_t divisor)
+	constexpr uint64_t div128by64to64(uint64_t dividend_hi64, uint64_t& dividend_lo64, uint64_t divisor)
 	{
 		int k = 0;
 		if (divisor < (uint64_t(1) << 63))
 		{
 			k = hint_clz(divisor);
-			divisor <<= k; // Normalization.
+			divisor <<= k;	// Normalization.
 			dividend_hi64 = (dividend_hi64 << k) | (dividend_lo64 >> (64 - k));
 			dividend_lo64 <<= k;
 		}
@@ -435,7 +435,7 @@ namespace HyperInt
 	namespace Transform
 	{
 		template <typename T>
-		inline void transform2(T &sum, T &diff)
+		inline void transform2(T& sum, T& diff)
 		{
 			T temp0 = sum, temp1 = diff;
 			sum = temp0 + temp1;
@@ -484,22 +484,26 @@ namespace HyperInt
 					return InternalUInt128(rhs, high - (rhs > low));
 				}
 				// Only compute the low * rhs.low
-				InternalUInt128 operator*(const InternalUInt128 &rhs) const
+				InternalUInt128 operator*(const InternalUInt128& rhs) const
 				{
-					return mul64x64to128(low, rhs.low);
+					InternalUInt128 res;
+					mul64x64to128(low, rhs.low, res.low, res.high);
+					return res;
 				}
 				// Only compute the low * rhs
 				InternalUInt128 operator*(uint64_t rhs) const
 				{
-					return mul64x64to128(low, rhs);
+					InternalUInt128 res;
+					mul64x64to128(low, rhs, res.low, res.high);
+					return res;
 				}
 				// Only compute the 128bit / 64 bit
-				constexpr InternalUInt128 operator/(const InternalUInt128 &rhs) const
+				constexpr InternalUInt128 operator/(const InternalUInt128& rhs) const
 				{
 					return *this / rhs.low;
 				}
 				// Only compute the 128bit % 64 bit
-				constexpr InternalUInt128 operator%(const InternalUInt128 &rhs) const
+				constexpr InternalUInt128 operator%(const InternalUInt128& rhs) const
 				{
 					return *this % rhs.low;
 				}
@@ -514,35 +518,36 @@ namespace HyperInt
 				constexpr InternalUInt128 operator%(uint64_t rhs) const
 				{
 					InternalUInt128 quot = *this;
-					uint64_t rem = quot.selfDivRem(rhs);
+					uint64_t		rem = quot.selfDivRem(rhs);
 					return InternalUInt128(rem);
 				}
-				constexpr InternalUInt128 &operator+=(const InternalUInt128 &rhs)
+				constexpr InternalUInt128& operator+=(const InternalUInt128& rhs)
 				{
 					return *this = *this + rhs;
 				}
-				constexpr InternalUInt128 &operator-=(const InternalUInt128 &rhs)
+				constexpr InternalUInt128& operator-=(const InternalUInt128& rhs)
 				{
 					return *this = *this - rhs;
 				}
-				constexpr InternalUInt128 &operator+=(uint64_t rhs)
+				constexpr InternalUInt128& operator+=(uint64_t rhs)
 				{
 					return *this = *this + rhs;
 				}
-				constexpr InternalUInt128 &operator-=(uint64_t rhs)
+				constexpr InternalUInt128& operator-=(uint64_t rhs)
 				{
 					return *this = *this - rhs;
 				}
 				// Only compute the low * rhs.low
-				constexpr InternalUInt128 &operator*=(const InternalUInt128 &rhs)
+				constexpr InternalUInt128& operator*=(const InternalUInt128& rhs)
 				{
-					return *this = mul64x64to128_base(low, rhs.low);
+					mul64x64to128_base(low, rhs.low, low, high);
+					return *this;
 				}
-				constexpr InternalUInt128 &operator/=(const InternalUInt128 &rhs)
+				constexpr InternalUInt128& operator/=(const InternalUInt128& rhs)
 				{
 					return *this = *this / rhs;
 				}
-				constexpr InternalUInt128 &operator%=(const InternalUInt128 &rhs)
+				constexpr InternalUInt128& operator%=(const InternalUInt128& rhs)
 				{
 					return *this = *this % rhs;
 				}
@@ -560,9 +565,11 @@ namespace HyperInt
 				}
 				static constexpr InternalUInt128 mul64x64(uint64_t a, uint64_t b)
 				{
-					return InternalUInt128(mul64x64to128_base(a, b));
+					InternalUInt128 res;
+					mul64x64to128_base(a, b, res.low, res.high);
+					return res;
 				}
-				constexpr bool operator<(const InternalUInt128 &rhs) const
+				constexpr bool operator<(const InternalUInt128& rhs) const
 				{
 					if (high != rhs.high)
 					{
@@ -570,7 +577,7 @@ namespace HyperInt
 					}
 					return low < rhs.low;
 				}
-				constexpr bool operator==(const InternalUInt128 &rhs) const
+				constexpr bool operator==(const InternalUInt128& rhs) const
 				{
 					return high == rhs.high && low == rhs.low;
 				}
@@ -602,11 +609,11 @@ namespace HyperInt
 					}
 					return InternalUInt128(high >> (shift - 64), 0);
 				}
-				constexpr InternalUInt128 &operator<<=(int shift)
+				constexpr InternalUInt128& operator<<=(int shift)
 				{
 					return *this = *this << shift;
 				}
-				constexpr InternalUInt128 &operator>>=(int shift)
+				constexpr InternalUInt128& operator>>=(int shift)
 				{
 					return *this = *this >> shift;
 				}
@@ -629,8 +636,8 @@ namespace HyperInt
 						return std::to_string(low);
 					}
 					constexpr uint64_t BASE(10000'0000'0000'0000);
-					InternalUInt128 copy(*this);
-					std::string s;
+					InternalUInt128	   copy(*this);
+					std::string		   s;
 					s = ui64to_string_base10(uint64_t(copy.selfDivRem(BASE)), 16) + s;
 					s = ui64to_string_base10(uint64_t(copy.selfDivRem(BASE)), 16) + s;
 					return std::to_string(uint64_t(copy.selfDivRem(BASE))) + s;
@@ -647,11 +654,14 @@ namespace HyperInt
 
 			class InternalUInt192
 			{
+				friend InternalUInt128;
+
 			private:
 				uint64_t low, mid, high;
 
 			public:
-				constexpr InternalUInt192(uint64_t low = 0, uint64_t mi = 0, uint64_t high = 0) : low(low), mid(mi), high(high) {}
+				constexpr InternalUInt192() : low(0), mid(0), high(0) {}
+				constexpr InternalUInt192(uint64_t low, uint64_t mi = 0, uint64_t high = 0) : low(low), mid(mi), high(high) {}
 				constexpr InternalUInt192(InternalUInt128 n) : low(n.low64()), mid(n.high64()), high(0) {}
 				constexpr InternalUInt192 operator+(InternalUInt192 rhs) const
 				{
@@ -680,19 +690,19 @@ namespace HyperInt
 					InternalUInt192 result(*this);
 					return result.selfDivRem(rhs);
 				}
-				constexpr InternalUInt192 &operator+=(const InternalUInt192 &rhs)
+				constexpr InternalUInt192& operator+=(const InternalUInt192& rhs)
 				{
 					return *this = *this + rhs;
 				}
-				constexpr InternalUInt192 &operator-=(const InternalUInt192 &rhs)
+				constexpr InternalUInt192& operator-=(const InternalUInt192& rhs)
 				{
 					return *this = *this - rhs;
 				}
-				constexpr InternalUInt192 &operator/=(const InternalUInt192 &rhs)
+				constexpr InternalUInt192& operator/=(const InternalUInt192& rhs)
 				{
 					return *this = *this / rhs;
 				}
-				constexpr InternalUInt192 &operator%=(const InternalUInt192 &rhs)
+				constexpr InternalUInt192& operator%=(const InternalUInt192& rhs)
 				{
 					return *this = *this % rhs;
 				}
@@ -715,42 +725,51 @@ namespace HyperInt
 					}
 					return InternalUInt192(0, 0, low << (shift - 128));
 				}
-				constexpr bool operator<(InternalUInt192 rhs) const
+				friend constexpr bool operator<(const InternalUInt192& lhs, const InternalUInt192& rhs)
 				{
-					if (high != rhs.high)
+					if (lhs.high != rhs.high)
 					{
-						return high < rhs.high;
+						return lhs.high < rhs.high;
 					}
-					if (mid != rhs.mid)
+					if (lhs.mid != rhs.mid)
 					{
-						return mid < rhs.mid;
+						return lhs.mid < rhs.mid;
 					}
-					return low < rhs.low;
+					return lhs.low < rhs.low;
 				}
-				constexpr bool operator==(InternalUInt192 rhs) const
+				friend constexpr bool operator<=(const InternalUInt192& lhs, const InternalUInt192& rhs)
 				{
-					return high == rhs.high && mid == rhs.mid && low == rhs.low;
+					return !(rhs > lhs);
 				}
-				static InternalUInt192 mul128x64(InternalUInt128 a, uint64_t b)
+				friend constexpr bool operator>(const InternalUInt192& lhs, const InternalUInt128& rhs)
 				{
-					auto product0 = mul64x64to128(b, a.low64());
-					auto product1 = mul64x64to128(b, a.high64());
+					return rhs < lhs;
+				}
+				friend constexpr bool operator>=(const InternalUInt192& lhs, const InternalUInt192& rhs)
+				{
+					return !(lhs < rhs);
+				}
+				friend constexpr bool operator==(const InternalUInt192& lhs, const InternalUInt192& rhs)
+				{
+					return lhs.low == rhs.low && lhs.mid == rhs.mid && lhs.high == rhs.high;
+				}
+				friend constexpr bool operator!=(const InternalUInt192& lhs, const InternalUInt192& rhs)
+				{
+					return !(lhs == rhs);
+				}
+				static constexpr InternalUInt192 mul128x64(InternalUInt128 a, uint64_t b)
+				{
+					auto			prod1 = InternalUInt128::mul64x64(b, a.low64());
+					auto			prod2 = InternalUInt128::mul64x64(b, a.high64());
 					InternalUInt192 result;
-					result.low = product0.first;
-					result.mid = product0.second + product1.first;
-					result.high = product1.second + (result.mid < product0.second);
+					result.low = prod1.low64();
+					result.mid = prod1.high64() + prod2.low64();
+					result.high = prod2.high64() + (result.mid < prod1.high64());
 					return result;
 				}
 				static constexpr InternalUInt192 mul64x64x64(uint64_t a, uint64_t b, uint64_t c)
 				{
-					auto product0 = mul64x64to128_base(a, b);
-					auto product1 = mul64x64to128_base(c, product0.first);
-					auto product2 = mul64x64to128_base(c, product0.second);
-					InternalUInt192 result;
-					result.low = product1.first;
-					result.mid = product1.second + product2.first;
-					result.high = product2.second + (result.mid < product1.second);
-					return result;
+					return mul128x64(InternalUInt128::mul64x64(a, b), c);
 				}
 				constexpr uint64_t selfDivRem(uint64_t divisor)
 				{
@@ -776,8 +795,8 @@ namespace HyperInt
 						return InternalUInt128(mid, low).toStringBase10();
 					}
 					constexpr uint64_t BASE(10000'0000'0000'0000);
-					InternalUInt192 copy(*this);
-					std::string s;
+					InternalUInt192	   copy(*this);
+					std::string		   s;
 					s = ui64to_string_base10(uint64_t(copy.selfDivRem(BASE)), 16) + s;
 					s = ui64to_string_base10(uint64_t(copy.selfDivRem(BASE)), 16) + s;
 					s = ui64to_string_base10(uint64_t(copy.selfDivRem(BASE)), 16) + s;
@@ -794,11 +813,11 @@ namespace HyperInt
 			};
 
 			template <typename Int128Type>
-			constexpr uint64_t high64(const Int128Type &n)
+			constexpr uint64_t high64(const Int128Type& n)
 			{
 				return n >> 64;
 			}
-			constexpr uint64_t high64(const InternalUInt128 &n)
+			constexpr uint64_t high64(const InternalUInt128& n)
 			{
 				return n.high64();
 			}
@@ -806,7 +825,7 @@ namespace HyperInt
 			using UInt128Default = __uint128_t;
 #else
 			using UInt128Default = InternalUInt128;
-#endif // UINT128T
+#endif	// UINT128T
 
 			//  Montgomery for mod > 2^32
 			//  default R = 2^64
@@ -841,15 +860,15 @@ namespace HyperInt
 					rhs.data = mulMontRunTimeLazy(data, rhs.data);
 					return rhs;
 				}
-				constexpr MontInt64Lazy &operator+=(const MontInt64Lazy &rhs)
+				constexpr MontInt64Lazy& operator+=(const MontInt64Lazy& rhs)
 				{
 					return *this = *this + rhs;
 				}
-				constexpr MontInt64Lazy &operator-=(const MontInt64Lazy &rhs)
+				constexpr MontInt64Lazy& operator-=(const MontInt64Lazy& rhs)
 				{
 					return *this = *this - rhs;
 				}
-				constexpr MontInt64Lazy &operator*=(const MontInt64Lazy &rhs)
+				constexpr MontInt64Lazy& operator*=(const MontInt64Lazy& rhs)
 				{
 					data = mulMontCompileTime(data, rhs.data);
 					return *this;
@@ -885,21 +904,21 @@ namespace HyperInt
 				}
 				static constexpr uint64_t modInv()
 				{
-					constexpr uint64_t mod_inv = inv_mod2pow(mod(), 64); //(mod_inv * mod)%(2^64) = 1
+					constexpr uint64_t mod_inv = inv_mod2pow(mod(), 64);	//(mod_inv * mod)%(2^64) = 1
 					return mod_inv;
 				}
 				static constexpr uint64_t modInvNeg()
 				{
-					constexpr uint64_t mod_inv_neg = uint64_t(0 - modInv()); //(mod_inv_neg + mod_inv)%(2^64) = 0
+					constexpr uint64_t mod_inv_neg = uint64_t(0 - modInv());	//(mod_inv_neg + mod_inv)%(2^64) = 0
 					return mod_inv_neg;
 				}
 				static constexpr uint64_t rSquare()
 				{
-					constexpr Int128Type r = (Int128Type(1) << 64) % Int128Type(mod()); // R % mod
-					constexpr uint64_t r2 = uint64_t(qpow(r, 2, Int128Type(mod())));	// R^2 % mod
+					constexpr Int128Type r = (Int128Type(1) << 64) % Int128Type(mod());  // R % mod
+					constexpr uint64_t	 r2 = uint64_t(qpow(r, 2, Int128Type(mod())));   // R^2 % mod
 					return r2;
 				}
-				static_assert((mod() * modInv()) == 1, "mod_inv not correct");
+				static_assert((mod()* modInv()) == 1, "mod_inv not correct");
 
 				static constexpr uint64_t toMont(uint64_t n)
 				{
@@ -910,19 +929,19 @@ namespace HyperInt
 					return redc(Int128Type(n));
 				}
 
-				static uint64_t redcFastLazy(const Int128Type &input)
+				static uint64_t redcFastLazy(const Int128Type& input)
 				{
 					Int128Type n = uint64_t(input) * modInvNeg();
 					n = n * mod();
 					n += input;
 					return high64(n);
 				}
-				static uint64_t redcFast(const Int128Type &input)
+				static uint64_t redcFast(const Int128Type& input)
 				{
 					uint64_t n = redcFastLazy(input);
 					return n < mod() ? n : n - mod();
 				}
-				static constexpr uint64_t redc(const Int128Type &input)
+				static constexpr uint64_t redc(const Int128Type& input)
 				{
 					Int128Type n = uint64_t(input) * modInvNeg();
 					n *= Int128Type(mod());
@@ -961,17 +980,17 @@ namespace HyperInt
 			template <typename ModInt1, typename ModInt2, typename ModInt3>
 			inline InternalUInt192 crt3(ModInt1 n1, ModInt2 n2, ModInt3 n3)
 			{
-				constexpr uint64_t MOD1 = ModInt1::mod(), MOD2 = ModInt2::mod(), MOD3 = ModInt3::mod();
-				constexpr InternalUInt192 MOD123 = InternalUInt192::mul64x64x64(MOD1, MOD2, MOD3); // MOD1*MOD2*MOD3
-				constexpr InternalUInt128 MOD12 = InternalUInt128::mul64x64(MOD1, MOD2); // MOD1*MOD2
-				constexpr InternalUInt128 MOD23 = InternalUInt128::mul64x64(MOD2, MOD3); // MOD2*MOD3
-				constexpr InternalUInt128 MOD13 = InternalUInt128::mul64x64(MOD1, MOD3); // MOD1*MOD3
-				constexpr uint64_t MOD23_M1 = InternalUInt128::mul64x64(MOD2 % MOD1, MOD3 % MOD1) % InternalUInt128(MOD1); // (MOD2*MOD3)  mod MOD1
-				constexpr uint64_t MOD13_M2 = InternalUInt128::mul64x64(MOD1 % MOD2, MOD3 % MOD2) % InternalUInt128(MOD2); // (MOD1*MOD3)  mod MOD2
-				constexpr uint64_t MOD12_M3 = InternalUInt128::mul64x64(MOD1 % MOD3, MOD2 % MOD3) % InternalUInt128(MOD3); // (MOD1*MOD2)  mod MOD3
-				constexpr ModInt1 MOD23_INV1 = mod_inv<int64_t>(MOD23_M1, MOD1); // (MOD2*MOD3)^-1 mod MOD1
-				constexpr ModInt2 MOD13_INV2 = mod_inv<int64_t>(MOD13_M2, MOD2); // (MOD1*MOD3)^-1 mod MOD2
-				constexpr ModInt3 MOD12_INV3 = mod_inv<int64_t>(MOD12_M3, MOD3); // (MOD1*MOD2)^-1 mod MOD3
+				constexpr uint64_t		  MOD1 = ModInt1::mod(), MOD2 = ModInt2::mod(), MOD3 = ModInt3::mod();
+				constexpr InternalUInt192 MOD123 = InternalUInt192::mul64x64x64(MOD1, MOD2, MOD3);								   // MOD1*MOD2*MOD3
+				constexpr InternalUInt128 MOD12 = InternalUInt128::mul64x64(MOD1, MOD2);											   // MOD1*MOD2
+				constexpr InternalUInt128 MOD23 = InternalUInt128::mul64x64(MOD2, MOD3);											   // MOD2*MOD3
+				constexpr InternalUInt128 MOD13 = InternalUInt128::mul64x64(MOD1, MOD3);											   // MOD1*MOD3
+				constexpr uint64_t		  MOD23_M1 = InternalUInt128::mul64x64(MOD2 % MOD1, MOD3 % MOD1) % InternalUInt128(MOD1);  // (MOD2*MOD3)  mod MOD1
+				constexpr uint64_t		  MOD13_M2 = InternalUInt128::mul64x64(MOD1 % MOD2, MOD3 % MOD2) % InternalUInt128(MOD2);  // (MOD1*MOD3)  mod MOD2
+				constexpr uint64_t		  MOD12_M3 = InternalUInt128::mul64x64(MOD1 % MOD3, MOD2 % MOD3) % InternalUInt128(MOD3);  // (MOD1*MOD2)  mod MOD3
+				constexpr ModInt1		  MOD23_INV1 = mod_inv<int64_t>(MOD23_M1, MOD1);											   // (MOD2*MOD3)^-1 mod MOD1
+				constexpr ModInt2		  MOD13_INV2 = mod_inv<int64_t>(MOD13_M2, MOD2);											   // (MOD1*MOD3)^-1 mod MOD2
+				constexpr ModInt3		  MOD12_INV3 = mod_inv<int64_t>(MOD12_M3, MOD3);											   // (MOD1*MOD2)^-1 mod MOD3
 				static_assert(check_inv<InternalUInt128>(MOD23_INV1, MOD23_M1, MOD1), "INV1 error");
 				static_assert(check_inv<InternalUInt128>(MOD13_INV2, MOD13_M2, MOD2), "INV2 error");
 				static_assert(check_inv<InternalUInt128>(MOD12_INV3, MOD12_M3, MOD3), "INV3 error");
@@ -997,7 +1016,7 @@ namespace HyperInt
 				// in: in_out0<4p, in_ou1<4p; in_out2<2p, in_ou3<2p
 				// out: in_out0<4p, in_ou1<4p; in_out2<4p, in_ou3<4p
 				template <uint64_t ROOT, typename ModIntType>
-				inline void dit_butterfly244(ModIntType &in_out0, ModIntType &in_out1, ModIntType &in_out2, ModIntType &in_out3)
+				inline void dit_butterfly244(ModIntType& in_out0, ModIntType& in_out1, ModIntType& in_out2, ModIntType& in_out3)
 				{
 					ModIntType temp0, temp1, temp2, temp3;
 					temp0 = in_out0.largeNorm2();
@@ -1014,7 +1033,7 @@ namespace HyperInt
 				// in: in_out0<2p, in_ou1<2p; in_out2<2p, in_ou3<2p
 				// out: in_out0<2p, in_ou1<2p; in_out2<4p, in_ou3<4p
 				template <uint64_t ROOT, typename ModIntType>
-				inline void dif_butterfly244(ModIntType &in_out0, ModIntType &in_out1, ModIntType &in_out2, ModIntType &in_out3)
+				inline void dif_butterfly244(ModIntType& in_out0, ModIntType& in_out1, ModIntType& in_out2, ModIntType& in_out3)
 				{
 					ModIntType temp0, temp1, temp2, temp3;
 					temp0 = in_out0.rawAdd(in_out2);
@@ -1031,7 +1050,7 @@ namespace HyperInt
 				// in: in_out0<4p, in_ou1<4p
 				// out: in_out0<4p, in_ou1<4p
 				template <typename ModIntType>
-				inline void dit_butterfly2(ModIntType &in_out0, ModIntType &in_out1, const ModIntType &omega)
+				inline void dit_butterfly2(ModIntType& in_out0, ModIntType& in_out1, const ModIntType& omega)
 				{
 					auto x = in_out0.largeNorm2();
 					auto y = in_out1 * omega;
@@ -1042,7 +1061,7 @@ namespace HyperInt
 				// in: in_out0<2p, in_ou1<2p
 				// out: in_out0<2p, in_ou1<2p
 				template <typename ModIntType>
-				inline void dif_butterfly2(ModIntType &in_out0, ModIntType &in_out1, const ModIntType &omega)
+				inline void dif_butterfly2(ModIntType& in_out0, ModIntType& in_out1, const ModIntType& omega)
 				{
 					auto x = in_out0 + in_out1;
 					auto y = in_out0.rawSub(in_out1);
@@ -1054,7 +1073,7 @@ namespace HyperInt
 				struct NTTShort
 				{
 					static constexpr size_t NTT_LEN = MAX_LEN;
-					static constexpr int LOG_LEN = hint_log2(NTT_LEN);
+					static constexpr int	LOG_LEN = hint_log2(NTT_LEN);
 					struct TableType
 					{
 						std::array<ModIntType, NTT_LEN> omega_table;
@@ -1063,8 +1082,8 @@ namespace HyperInt
 						{
 							for (int omega_log_len = 0; omega_log_len <= LOG_LEN; omega_log_len++)
 							{
-								size_t omega_len = size_t(1) << omega_log_len, omega_count = omega_len / 2;
-								auto it = &omega_table[omega_len / 2];
+								size_t	   omega_len = size_t(1) << omega_log_len, omega_count = omega_len / 2;
+								auto	   it = &omega_table[omega_len / 2];
 								ModIntType root = qpow(ModIntType(ROOT), (ModIntType::mod() - 1) / omega_len);
 								ModIntType omega(1);
 								for (size_t i = 0; i < omega_count; i++)
@@ -1074,15 +1093,15 @@ namespace HyperInt
 								}
 							}
 						}
-						constexpr ModIntType &operator[](size_t i)
+						constexpr ModIntType& operator[](size_t i)
 						{
 							return omega_table[i];
 						}
-						constexpr const ModIntType &operator[](size_t i) const
+						constexpr const ModIntType& operator[](size_t i) const
 						{
 							return omega_table[i];
 						}
-						constexpr const ModIntType *getOmegaIt(size_t len) const
+						constexpr const ModIntType* getOmegaIt(size_t len) const
 						{
 							return &omega_table[len / 2];
 						}
@@ -1115,8 +1134,8 @@ namespace HyperInt
 						for (; rank <= len; rank *= 4)
 						{
 							size_t gap = rank / 4;
-							auto omega_it = table.getOmegaIt(rank), last_omega_it = table.getOmegaIt(rank / 2);
-							auto it0 = in_out, it1 = in_out + gap, it2 = in_out + gap * 2, it3 = in_out + gap * 3;
+							auto   omega_it = table.getOmegaIt(rank), last_omega_it = table.getOmegaIt(rank / 2);
+							auto   it0 = in_out, it1 = in_out + gap, it2 = in_out + gap * 2, it3 = in_out + gap * 3;
 							for (size_t j = 0; j < len; j += rank)
 							{
 								for (size_t i = 0; i < gap; i++)
@@ -1138,8 +1157,8 @@ namespace HyperInt
 						for (; rank >= 16; rank /= 4)
 						{
 							size_t gap = rank / 4;
-							auto omega_it = table.getOmegaIt(rank), last_omega_it = table.getOmegaIt(rank / 2);
-							auto it0 = in_out, it1 = in_out + gap, it2 = in_out + gap * 2, it3 = in_out + gap * 3;
+							auto   omega_it = table.getOmegaIt(rank), last_omega_it = table.getOmegaIt(rank / 2);
+							auto   it0 = in_out, it1 = in_out + gap, it2 = in_out + gap * 2, it3 = in_out + gap * 3;
 							for (size_t j = 0; j < len; j += rank)
 							{
 								for (size_t i = 0; i < gap; i++)
@@ -1288,14 +1307,14 @@ namespace HyperInt
 						static constexpr ModIntType w1 = qpow(ModIntType(ROOT), (ModIntType::mod() - 1) / 8);
 						static constexpr ModIntType w2 = qpow(w1, 2);
 						static constexpr ModIntType w3 = qpow(w1, 3);
-						auto temp0 = in_out[0];
-						auto temp1 = in_out[1];
-						auto temp2 = in_out[2];
-						auto temp3 = in_out[3];
-						auto temp4 = in_out[4];
-						auto temp5 = in_out[5];
-						auto temp6 = in_out[6];
-						auto temp7 = in_out[7];
+						auto						temp0 = in_out[0];
+						auto						temp1 = in_out[1];
+						auto						temp2 = in_out[2];
+						auto						temp3 = in_out[3];
+						auto						temp4 = in_out[4];
+						auto						temp5 = in_out[5];
+						auto						temp6 = in_out[6];
+						auto						temp7 = in_out[7];
 
 						transform2(temp0, temp1);
 						transform2(temp2, temp3);
@@ -1326,14 +1345,14 @@ namespace HyperInt
 						static constexpr ModIntType w1 = qpow(ModIntType(ROOT), (ModIntType::mod() - 1) / 8);
 						static constexpr ModIntType w2 = qpow(w1, 2);
 						static constexpr ModIntType w3 = qpow(w1, 3);
-						auto temp0 = in_out[0];
-						auto temp1 = in_out[1];
-						auto temp2 = in_out[2];
-						auto temp3 = in_out[3];
-						auto temp4 = in_out[4];
-						auto temp5 = in_out[5];
-						auto temp6 = in_out[6];
-						auto temp7 = in_out[7];
+						auto						temp0 = in_out[0];
+						auto						temp1 = in_out[1];
+						auto						temp2 = in_out[2];
+						auto						temp3 = in_out[3];
+						auto						temp4 = in_out[4];
+						auto						temp5 = in_out[5];
+						auto						temp6 = in_out[6];
+						auto						temp7 = in_out[7];
 
 						transform2(temp0, temp4);
 						transform2(temp1, temp5);
@@ -1416,7 +1435,7 @@ namespace HyperInt
 					using ModIntType = ModInt64Type;
 					using IntType = typename ModIntType::IntType;
 
-					static constexpr size_t L2_BYTE = size_t(1) << 20; // 1MB L2 cache size, change this if you know your cache size.
+					static constexpr size_t L2_BYTE = size_t(1) << 20;  // 1MB L2 cache size, change this if you know your cache size.
 					static constexpr size_t LONG_THRESHOLD = std::min(L2_BYTE / sizeof(ModIntType), NTT_MAX_LEN);
 					using NTTTemplate = NTTShort<LONG_THRESHOLD, root(), ModIntType>;
 
@@ -1434,8 +1453,8 @@ namespace HyperInt
 						dit244(in_out, ntt_len / 2);
 						const ModIntType unit_omega1 = qpow(ModIntType(root()), (mod() - 1) / ntt_len);
 						const ModIntType unit_omega3 = qpow(unit_omega1, 3);
-						ModIntType omega1(1), omega3(1);
-						auto it0 = in_out, it1 = in_out + quarter_len, it2 = in_out + quarter_len * 2, it3 = in_out + quarter_len * 3;
+						ModIntType		 omega1(1), omega3(1);
+						auto			 it0 = in_out, it1 = in_out + quarter_len, it2 = in_out + quarter_len * 2, it3 = in_out + quarter_len * 3;
 						for (size_t i = 0; i < quarter_len; i++)
 						{
 							ModIntType temp0 = it0[i], temp1 = it1[i], temp2 = it2[i] * omega1, temp3 = it3[i] * omega3;
@@ -1453,11 +1472,11 @@ namespace HyperInt
 							NTTTemplate::dif(in_out, ntt_len);
 							return;
 						}
-						size_t quarter_len = ntt_len / 4;
+						size_t			 quarter_len = ntt_len / 4;
 						const ModIntType unit_omega1 = qpow(ModIntType(root()), (mod() - 1) / ntt_len);
 						const ModIntType unit_omega3 = qpow(unit_omega1, 3);
-						ModIntType omega1(1), omega3(1);
-						auto it0 = in_out, it1 = in_out + quarter_len, it2 = in_out + quarter_len * 2, it3 = in_out + quarter_len * 3;
+						ModIntType		 omega1(1), omega3(1);
+						auto			 it0 = in_out, it1 = in_out + quarter_len, it2 = in_out + quarter_len * 2, it3 = in_out + quarter_len * 3;
 						for (size_t i = 0; i < quarter_len; i++)
 						{
 							ModIntType temp0 = it0[i], temp1 = it1[i], temp2 = it2[i], temp3 = it3[i];
@@ -1519,9 +1538,9 @@ namespace HyperInt
 							return;
 						}
 						const size_t quarter_len = ntt_len / 4;
-						ModIntType unit_omega1 = qpow(ModIntType(root()), (mod() - 1) / ntt_len);
-						ModIntType unit_omega3 = qpow(unit_omega1, 3);
-						ModIntType omega1(1), omega3(1);
+						ModIntType	 unit_omega1 = qpow(ModIntType(root()), (mod() - 1) / ntt_len);
+						ModIntType	 unit_omega3 = qpow(unit_omega1, 3);
+						ModIntType	 omega1(1), omega3(1);
 						if (in1 != in2)
 						{
 							for (size_t i = 0; i < quarter_len; i++)
@@ -1592,17 +1611,83 @@ namespace HyperInt
 				constexpr int NTT<MOD, ROOT, Int128Type>::MAX_LOG_LEN;
 				template <uint64_t MOD, uint64_t ROOT, typename Int128Type>
 				constexpr size_t NTT<MOD, ROOT, Int128Type>::NTT_MAX_LEN;
-			} // namespace SplitRadix
+			}  // namespace SplitRadix
 
-			using NTT0 = SplitRadix::NTT<MOD0, ROOT0>; // using 64bit integer, Montgomery speed up
-			using NTT1 = SplitRadix::NTT<MOD1, ROOT1>; // using 64bit integer, Montgomery speed up
-			using NTT2 = SplitRadix::NTT<MOD2, ROOT2>; // using 64bit integer, Montgomery speed up
-		} // namespace NumberTheoreticTransform
-	} // namespace Transform
+			using NTT0 = SplitRadix::NTT<MOD0, ROOT0>;	// using 64bit integer, Montgomery speed up
+			using NTT1 = SplitRadix::NTT<MOD1, ROOT1>;	// using 64bit integer, Montgomery speed up
+			using NTT2 = SplitRadix::NTT<MOD2, ROOT2>;	// using 64bit integer, Montgomery speed up
+		}  // namespace NumberTheoreticTransform
+	}  // namespace Transform
 
 	namespace Arithmetic
 	{
 		using Transform::NumberTheoreticTransform::InternalUInt128;
+
+		template <typename WordTy>
+		constexpr WordTy lshift_in_word_half(const WordTy in[], size_t len, WordTy out[], int shift)
+		{
+			constexpr int WORD_BITS = sizeof(WordTy) * CHAR_BIT;
+			assert(shift >= 0 && shift < WORD_BITS);
+			if (0 == len)
+			{
+				return 0;
+			}
+			if (0 == shift)
+			{
+				std::copy(in, in + len, out);
+				return 0;
+			}
+			// [n,last] -> [?,n >> shift_rem | last << shift]
+			WordTy	  last = in[len - 1], ret = last;
+			const int shift_rem = WORD_BITS - shift;
+			size_t	  i = len - 1;
+			while (i > 0)
+			{
+				i--;
+				WordTy n = in[i];
+				out[i + 1] = (last << shift) | (n >> shift_rem);
+				last = n;
+			}
+			out[0] = last << shift;
+			return ret >> shift_rem;
+		}
+		template <typename WordTy>
+		constexpr void lshift_in_word(const WordTy in[], size_t len, WordTy out[], int shift)
+		{
+			if (0 == len)
+			{
+				return;
+			}
+			assert(shift >= 0 && size_t(shift) < sizeof(WordTy) * CHAR_BIT);
+			uint64_t last = lshift_in_word_half(in, len, out, shift);
+			out[len] = last;
+		}
+
+		template <typename WordTy>
+		constexpr void rshift_in_word(const WordTy in[], size_t len, WordTy out[], int shift)
+		{
+			constexpr int WORD_BITS = sizeof(WordTy) * CHAR_BIT;
+			if (0 == len)
+			{
+				return;
+			}
+			if (0 == shift)
+			{
+				std::copy(in, in + len, out);
+				return;
+			}
+			assert(shift >= 0 && size_t(shift) < sizeof(WordTy) * CHAR_BIT);
+			WordTy	  last = in[0];
+			const int shift_rem = WORD_BITS - shift;
+			for (size_t i = 1; i < len; i++)
+			{
+				WordTy n = in[i];
+				out[i - 1] = (last >> shift) | (n << shift_rem);
+				last = n;
+			}
+			out[len - 1] = last >> shift;
+		}
+
 		// 去除前导零，返回实际长度，如果数组为空，则返回0
 		template <typename T>
 		constexpr size_t remove_leading_zeros(const T array[], size_t length)
@@ -1639,14 +1724,14 @@ namespace HyperInt
 
 		size_t get_div_len(size_t l_len, size_t r_len)
 		{
-			return l_len + r_len + 1;
+			return l_len - r_len + 1;
 		}
 
 		// Binary absolute addtion a+b=sum, return the carry
 		template <typename UintTy>
-		constexpr bool abs_add_binary(const UintTy a[], size_t len_a, const UintTy b[], size_t len_b, UintTy sum[], bool assign_carry = true)
+		constexpr bool abs_add_binary_half(const UintTy a[], size_t len_a, const UintTy b[], size_t len_b, UintTy sum[])
 		{
-			bool carry = false;
+			bool   carry = false;
 			size_t i = 0, min_len = std::min(len_a, len_b);
 			for (; i < min_len; i++)
 			{
@@ -1660,18 +1745,21 @@ namespace HyperInt
 			{
 				sum[i] = add_half(b[i], UintTy(carry), carry);
 			}
-			if (assign_carry)
-			{
-				sum[i] = UintTy(carry);
-			}
 			return carry;
+		}
+		// Binary absolute addtion a+b=sum, return the carry
+		template <typename UintTy>
+		constexpr void abs_add_binary(const UintTy a[], size_t len_a, const UintTy b[], size_t len_b, UintTy sum[])
+		{
+			bool carry = abs_add_binary_half(a, len_a, b, len_b, sum);
+			sum[std::max(len_a, len_b)] = carry;
 		}
 
 		// Binary absolute subtraction a-b=diff, return the borrow
 		template <typename UintTy>
 		constexpr bool abs_sub_binary(const UintTy a[], size_t len_a, const UintTy b[], size_t len_b, UintTy diff[], bool assign_borow = false)
 		{
-			bool borrow = false;
+			bool   borrow = false;
 			size_t i = 0, min_len = std::min(len_a, len_b);
 			for (; i < min_len; i++)
 			{
@@ -1687,7 +1775,22 @@ namespace HyperInt
 			}
 			if (assign_borow)
 			{
-				diff[i] = UintTy(borrow); // 借位
+				diff[i] = UintTy(borrow);  // 借位
+			}
+			return borrow;
+		}
+
+		// a - num
+		template <typename UintTy>
+		constexpr bool abs_sub_num_binary(const UintTy a[], size_t len_a, UintTy num, UintTy diff[])
+		{
+			assert(len_a > 0);
+			bool   borrow = false;
+			size_t i = 1;
+			diff[0] = sub_half(a[0], num, borrow);
+			for (; i < len_a; i++)
+			{
+				diff[i] = sub_half(a[i], UintTy(borrow), borrow);
 			}
 			return borrow;
 		}
@@ -1700,19 +1803,19 @@ namespace HyperInt
 			struct CompareResult
 			{
 				size_t diff_len;
-				int cmp = 0;
+				int	   cmp = 0;
 			};
 			while (len > 0)
 			{
 				len--;
 				if (in1[len] != in2[len])
 				{
-					CompareResult result{len + 1, 0};
+					CompareResult result{ len + 1, 0 };
 					result.cmp = in1[len] > in2[len] ? 1 : -1;
 					return result;
 				}
 			}
-			return CompareResult{0, 0};
+			return CompareResult{ 0, 0 };
 		}
 
 		// Absolute compare, return 1 if a > b, -1 if a < b, 0 if a == b
@@ -1759,18 +1862,125 @@ namespace HyperInt
 		inline size_t mul_karatsuba_complexity(size_t len1, size_t len2)
 		{
 			static const double log2_3 = std::log2(3);
-			constexpr double KARATSUBA_COMPLEXITY_CONSTANT = 19;
+			constexpr double	KARATSUBA_COMPLEXITY_CONSTANT = 19;
 			return KARATSUBA_COMPLEXITY_CONSTANT * std::pow(len1, log2_3) * std::sqrt(double(len2) / len1);
 		}
 		inline size_t mul_ntt_complexity(size_t len1, size_t len2)
 		{
 			constexpr int NTT_COMPLEXITY_CONSTANT = 40;
-			size_t ntt_len = int_ceil2(len1 + len2 - 1);
+			size_t		  ntt_len = int_ceil2(len1 + len2 - 1);
 			return NTT_COMPLEXITY_CONSTANT * ntt_len * hint_log2(ntt_len);
 		}
 
+		inline uint64_t abs_mul_add_num64_half(const uint64_t in[], size_t len, uint64_t out[], uint64_t num_add, uint64_t num_mul)
+		{
+			size_t	 i = 0;
+			uint64_t prod_lo, prod_hi;
+			for (const size_t rem_len = len - len % 4; i < rem_len; i += 4)
+			{
+				mul64x64to128(in[i], num_mul, prod_lo, prod_hi);
+				prod_lo += num_add;
+				out[i] = prod_lo;
+				num_add = prod_hi + (prod_lo < num_add);
+
+				mul64x64to128(in[i + 1], num_mul, prod_lo, prod_hi);
+				prod_lo += num_add;
+				out[i + 1] = prod_lo;
+				num_add = prod_hi + (prod_lo < num_add);
+
+				mul64x64to128(in[i + 2], num_mul, prod_lo, prod_hi);
+				prod_lo += num_add;
+				out[i + 2] = prod_lo;
+				num_add = prod_hi + (prod_lo < num_add);
+
+				mul64x64to128(in[i + 3], num_mul, prod_lo, prod_hi);
+				prod_lo += num_add;
+				out[i + 3] = prod_lo;
+				num_add = prod_hi + (prod_lo < num_add);
+			}
+			for (; i < len; i++)
+			{
+				mul64x64to128(in[i], num_mul, prod_lo, prod_hi);
+				prod_lo += num_add;
+				out[i] = prod_lo;
+				num_add = prod_hi + (prod_lo < num_add);
+			}
+			return num_add;
+		}
+
+		/// @brief 2^64 base long integer multiply 64bit number, add another 64bit number to product.
+		/// @param in Input long integer.
+		/// @param length Number of 64-bit blocks in the input array.
+		/// @param out Output long integer, equals to input * num_mul + num_add
+		/// @param num_add The 64 bit number to add.
+		/// @param num_mul The 64 bit number to multiply.
+		/// @details
+		/// The function performs multiplication and addition on a large integer represented by multiple 64-bit blocks:
+		/// 1. For each block of the large integer from index 0 to `length-1`:
+		///    a. Multiply the current block `in[i]` by `num_mul`.
+		///    b. Add the current value of `num_add` to the product.
+		///    c. Store the lower 64 bits of the result in `out[i]`.
+		///    d. Update `num_add` with the higher 64 bits of the product (carry-over to the next block).
+		/// 2. After processing all blocks, store the final value of `num_add` (the carry-over) in `out[length]`.
+		inline void abs_mul_add_num64(const uint64_t in[], size_t length, uint64_t out[], uint64_t num_add, uint64_t num_mul)
+		{
+			for (size_t i = 0; i < length; i++)
+			{
+				InternalUInt128 product = InternalUInt128(in[i]) * num_mul + num_add;
+				out[i] = uint64_t(product);
+				num_add = product.high64();
+			}
+			out[length] = num_add;
+		}
+
+		// in * num_mul + in_out -> in_out
+		inline void mul64_sub_proc(const uint64_t in[], size_t len, uint64_t in_out[], uint64_t num_mul)
+		{
+			uint64_t carry = 0;
+			size_t	 i = 0;
+			for (const size_t rem_len = len - len % 4; i < rem_len; i += 4)
+			{
+				bool	 cf;
+				uint64_t prod_lo, prod_hi;
+				mul64x64to128(in[i], num_mul, prod_lo, prod_hi);
+				prod_lo = add_half(prod_lo, in_out[i], cf);
+				prod_hi += cf;
+				in_out[i] = add_half(prod_lo, carry, cf);
+				carry = prod_hi + cf;
+
+				mul64x64to128(in[i + 1], num_mul, prod_lo, prod_hi);
+				prod_lo = add_half(prod_lo, in_out[i + 1], cf);
+				prod_hi += cf;
+				in_out[i + 1] = add_half(prod_lo, carry, cf);
+				carry = prod_hi + cf;
+
+				mul64x64to128(in[i + 2], num_mul, prod_lo, prod_hi);
+				prod_lo = add_half(prod_lo, in_out[i + 2], cf);
+				prod_hi += cf;
+				in_out[i + 2] = add_half(prod_lo, carry, cf);
+				carry = prod_hi + cf;
+
+				mul64x64to128(in[i + 3], num_mul, prod_lo, prod_hi);
+				prod_lo = add_half(prod_lo, in_out[i + 3], cf);
+				prod_hi += cf;
+				in_out[i + 3] = add_half(prod_lo, carry, cf);
+				carry = prod_hi + cf;
+			}
+			for (; i < len; i++)
+			{
+				bool	 cf;
+				uint64_t prod_lo, prod_hi;
+				mul64x64to128(in[i], num_mul, prod_lo, prod_hi);
+				prod_lo = add_half(prod_lo, in_out[i], cf);
+				prod_hi += cf;
+				in_out[i] = add_half(prod_lo, carry, cf);
+				carry = prod_hi + cf;
+			}
+			in_out[len] = carry;
+		}
+
 		// 小学乘法
-		inline void abs_mul64_classic(const uint64_t in1[], size_t len1, const uint64_t in2[], size_t len2, uint64_t out[], uint64_t *buffer_begin = nullptr, uint64_t *buffer_end = nullptr)
+		inline void abs_mul64_classic(const uint64_t in1[], size_t len1, const uint64_t in2[], size_t len2, uint64_t out[], uint64_t* work_begin = nullptr, uint64_t* work_end = nullptr)
 		{
 			const size_t out_len = get_mul_len(len1, len2);
 			len1 = remove_leading_zeros(in1, len1);
@@ -1778,50 +1988,43 @@ namespace HyperInt
 			if (len1 < len2)
 			{
 				std::swap(in1, in2);
-				std::swap(len1, len2); // Let in1 be the loonger one
+				std::swap(len1, len2);  // Let in1 be the loonger one
 			}
 			if (0 == len2 || nullptr == in1 || nullptr == in2)
 			{
 				std::fill_n(out, out_len, uint64_t(0));
 				return;
 			}
-			// Get enough buffer
-			std::vector<uint64_t> buffer;
-			const size_t buffer_size = get_mul_len(len1, len2);
-			if (buffer_begin + buffer_size > buffer_end)
+			if (1 == len2)
 			{
-				buffer.resize(buffer_size);
-				buffer_begin = buffer.data();
-				buffer_end = buffer_begin + buffer.size();
+				abs_mul_add_num64(in1, len1, out, 0, in2[0]);
+				return;
+			}
+			// Get enough work memory
+			std::vector<uint64_t> work_mem;
+			const size_t		  work_size = get_mul_len(len1, len2);
+			if (work_begin + work_size > work_end)
+			{
+				work_mem.resize(work_size);
+				work_begin = work_mem.data();
+				work_end = work_begin + work_mem.size();
 			}
 			else
 			{
-				// Clear last buffer that may used
-				std::fill_n(buffer_begin, buffer_size, uint64_t(0));
+				// Clear work_mem that may used
+				std::fill_n(work_begin, work_size, uint64_t(0));
 			}
-			auto work_buffer = buffer_begin;
-			const auto it2_end = in2 + len2;
+			auto out_temp = work_begin;
 			for (size_t i = 0; i < len1; i++)
 			{
-				uint64_t num1 = in1[i], carry = 0;
-				auto it_out = work_buffer + i;
-				for (auto it2 = in2; it2 < it2_end; it2++, it_out++)
-				{
-					bool cf = false;
-					auto prod = mul64x64to128(num1, it2[0]);
-					carry = add_half(carry, it_out[0], cf);
-					prod.second += cf;
-					it_out[0] = add_half(carry, prod.first, cf);
-					carry = prod.second + cf;
-				}
-				it_out[0] = carry;
+				mul64_sub_proc(in2, len2, out_temp + i, in1[i]);
 			}
-			std::copy(work_buffer, work_buffer + buffer_size, out);
-			std::fill(out + buffer_size, out + out_len, uint64_t(0));
+			std::copy(out_temp, out_temp + work_size, out);
+			std::fill(out + work_size, out + out_len, uint64_t(0));
 		}
 
 		// Karatsuba 乘法
-		inline void abs_mul64_karatsuba_buffered(const uint64_t in1[], size_t len1, const uint64_t in2[], size_t len2, uint64_t out[], uint64_t *buffer_begin = nullptr, uint64_t *buffer_end = nullptr)
+		inline void abs_mul64_karatsuba_buffered(const uint64_t in1[], size_t len1, const uint64_t in2[], size_t len2, uint64_t out[], uint64_t* buffer_begin = nullptr, uint64_t* buffer_end = nullptr)
 		{
 			const size_t out_len = get_mul_len(len1, len2);
 			len1 = remove_leading_zeros(in1, len1);
@@ -1829,7 +2032,7 @@ namespace HyperInt
 			if (len1 < len2)
 			{
 				std::swap(in1, in2);
-				std::swap(len1, len2); // Let in1 be the loonger one
+				std::swap(len1, len2);  // Let in1 be the loonger one
 			}
 			if (0 == len2 || nullptr == in1 || nullptr == in2)
 			{
@@ -1848,8 +2051,8 @@ namespace HyperInt
 			// Let M = AL * BL, N = AH * BH, K1 = (AH - AL), K2 = (BH - BL), K = K1 * K2 = AH * BH - (AH * BL + AL * BH) + AL * BL
 			// A * B = N * BASE^2 + (M + N - K) * BASE + M
 			const size_t base_len = (len1 + 1) / 2;
-			size_t len1_low = base_len, len1_high = len1 - base_len;
-			size_t len2_low = base_len, len2_high = len2 - base_len;
+			size_t		 len1_low = base_len, len1_high = len1 - base_len;
+			size_t		 len2_low = base_len, len2_high = len2 - base_len;
 			if (len2 <= base_len)
 			{
 				len2_low = len2;
@@ -1861,7 +2064,7 @@ namespace HyperInt
 
 			// Get enough buffer
 			std::vector<uint64_t> buffer;
-			const size_t buffer_size = m_len + n_len + get_mul_len(len1_low, len2_low);
+			const size_t		  buffer_size = m_len + n_len + get_mul_len(len1_low, len2_low);
 			if (buffer_begin + buffer_size > buffer_end)
 			{
 				buffer.resize(buffer_size * 2);
@@ -1878,8 +2081,8 @@ namespace HyperInt
 			// Compute K1,K2
 			len1_low = remove_leading_zeros(in1, len1_low);
 			len2_low = remove_leading_zeros(in2, len2_low);
-			int cmp1 = abs_difference_binary(in1, len1_low, in1 + base_len, len1_high, k1);
-			int cmp2 = abs_difference_binary(in2, len2_low, in2 + base_len, len2_high, k2);
+			int	   cmp1 = abs_difference_binary(in1, len1_low, in1 + base_len, len1_high, k1);
+			int	   cmp2 = abs_difference_binary(in2, len2_low, in2 + base_len, len2_high, k2);
 			size_t k1_len = remove_leading_zeros(k1, get_sub_len(len1_low, len1_high));
 			size_t k2_len = remove_leading_zeros(k2, get_sub_len(len2_low, len2_high));
 
@@ -1903,11 +2106,11 @@ namespace HyperInt
 						std::swap(m, n);
 					}
 					uint8_t carry = 0;
-					size_t i = 0;
-					auto out_p = out + base_len;
+					size_t	i = 0;
+					auto	out_p = out + base_len;
 					for (; i < n_len; i++)
 					{
-						bool cf;
+						bool	 cf;
 						uint64_t sum = add_half(m[i], uint64_t(carry), cf);
 						carry = cf;
 						sum = add_half(n[i], sum, cf);
@@ -1917,7 +2120,7 @@ namespace HyperInt
 					}
 					for (; i < m_len; i++)
 					{
-						bool cf;
+						bool	 cf;
 						uint64_t sum = add_half(m[i], uint64_t(carry), cf);
 						carry = cf;
 						out_p[i] = add_half(out_p[i], sum, cf);
@@ -1939,7 +2142,7 @@ namespace HyperInt
 				}
 				else
 				{
-					abs_add_binary(out + base_len, out_len - base_len, k, k_len, out + base_len, false);
+					abs_add_binary_half(out + base_len, out_len - base_len, k, k_len, out + base_len);
 				}
 			}
 		}
@@ -1957,8 +2160,8 @@ namespace HyperInt
 			{
 				return;
 			}
-			size_t out_len = len * 2, conv_len = out_len - 1;
-			size_t ntt_len = HyperInt::int_ceil2(conv_len);
+			size_t						  out_len = len * 2, conv_len = out_len - 1;
+			size_t						  ntt_len = HyperInt::int_ceil2(conv_len);
 			std::vector<NTT0::ModIntType> buffer1(ntt_len);
 			{
 				std::copy(in, in + len, buffer1.begin());
@@ -1993,12 +2196,12 @@ namespace HyperInt
 			}
 			if (in1 == in2)
 			{
-				abs_sqr64_ntt(in1, len1, out); // Square
+				abs_sqr64_ntt(in1, len1, out);  // Square
 				return;
 			}
 			using namespace HyperInt::Transform::NumberTheoreticTransform;
-			size_t out_len = len1 + len2, conv_len = out_len - 1;
-			size_t ntt_len = HyperInt::int_ceil2(conv_len);
+			size_t						  out_len = len1 + len2, conv_len = out_len - 1;
+			size_t						  ntt_len = HyperInt::int_ceil2(conv_len);
 			std::vector<NTT0::ModIntType> buffer1(ntt_len);
 			{
 				std::vector<NTT0::ModIntType> buffer2(ntt_len);
@@ -2030,6 +2233,68 @@ namespace HyperInt
 			out[conv_len] = uint64_t(carry);
 		}
 
+		inline void abs_mul64_balanced(const uint64_t in1[], size_t len1, const uint64_t in2[], size_t len2, uint64_t out[], uint64_t* work_begin = nullptr, uint64_t* work_end = nullptr)
+		{
+			if (len1 < len2)
+			{
+				std::swap(in1, in2);
+				std::swap(len1, len2);
+			}
+			if (len2 <= 24)
+			{
+				abs_mul64_classic(in1, len1, in2, len2, out, work_begin, work_end);
+			}
+			else if (len2 <= 1536)
+			{
+				abs_mul64_karatsuba_buffered(in1, len1, in2, len2, out, work_begin, work_end);
+			}
+			else
+			{
+				abs_mul64_ntt(in1, len1, in2, len2, out);
+			}
+		}
+
+		inline void abs_mul64(const uint64_t in1[], size_t len1, const uint64_t in2[], size_t len2, uint64_t out[], uint64_t* work_begin = nullptr, uint64_t* work_end = nullptr)
+		{
+			if (len1 < len2)
+			{
+				std::swap(in1, in2);
+				std::swap(len1, len2);
+			}
+			if (len2 <= 24)
+			{
+				abs_mul64_balanced(in1, len1, in2, len2, out, work_begin, work_end);
+				return;
+			}
+			// Get enough work memory
+			std::vector<uint64_t> work_mem;
+			const size_t		  work_size = len2 * 3 + len1;	// len1 + len2 + len2 * 2,存放结果以及平衡乘积
+			if (work_begin + work_size > work_end)
+			{
+				work_mem.resize(work_size + len2 * 6);  // 为karatsuba做准备
+				work_begin = work_mem.data();
+				work_end = work_begin + work_mem.size();
+			}
+			else
+			{
+				std::fill_n(work_begin, work_size, uint64_t(0));
+			}
+			auto   balance_prod = work_begin, total_prod = balance_prod + len2 * 2;
+			size_t rem = len1 % len2, i = len2;
+			abs_mul64_balanced(in2, len2, in1, len2, total_prod, work_begin + work_size, work_end);
+			for (; i < len1 - rem; i += len2)
+			{
+				abs_mul64_balanced(in2, len2, in1 + i, len2, balance_prod, work_begin + work_size, work_end);
+				abs_add_binary_half(balance_prod, len2 * 2, total_prod + i, len2, total_prod + i);
+			}
+			if (rem > 0)
+			{
+				abs_mul64(in2, len2, in1 + i, rem, balance_prod, work_begin + work_size, work_end);
+				abs_add_binary_half(total_prod + i, len2, balance_prod, len2 + rem, total_prod + i);
+			}
+			std::copy(total_prod, total_prod + len1 + len2, out);
+		}
+
 		/// @brief Multiply function selector.
 		class MultiplicationSelector
 		{
@@ -2038,7 +2303,7 @@ namespace HyperInt
 			using ComplexityFunc = std::function<size_t(size_t, size_t)>;
 			using MulFuncVector = std::vector<MultiplyFunc>;
 			using CplxFuncVector = std::vector<ComplexityFunc>;
-			MultiplicationSelector(const MulFuncVector &mul, const CplxFuncVector &cplx) : mul_funcs(mul), cplx_funcs(cplx) {}
+			MultiplicationSelector(const MulFuncVector& mul, const CplxFuncVector& cplx) : mul_funcs(mul), cplx_funcs(cplx) {}
 			size_t selectMulFunc(size_t len1, size_t len2) const
 			{
 				size_t min_i = 0, min_cplx = cplx_funcs[0](len1, len2);
@@ -2053,50 +2318,108 @@ namespace HyperInt
 				}
 				return min_i;
 			}
-			void operator()(const uint64_t *in1, size_t len1, const uint64_t *in2, size_t len2, uint64_t *out) const
+			void operator()(const uint64_t* in1, size_t len1, const uint64_t* in2, size_t len2, uint64_t* out) const
 			{
 				mul_funcs[selectMulFunc(len1, len2)](in1, len1, in2, len2, out);
 			}
 
 		private:
-			MulFuncVector mul_funcs;
+			MulFuncVector  mul_funcs;
 			CplxFuncVector cplx_funcs;
 		};
-		
+
 		// 使用 Meyers Singleton 模式，通过将静态变量包装在函数内部，确保它们在第一次使用时初始化
 		inline const MultiplicationSelector& getMultiplier()
 		{
-			static const MultiplicationSelector::MulFuncVector mul_funcs = { abs_mul64_karatsuba, abs_mul64_ntt };
+			static const MultiplicationSelector::MulFuncVector	mul_funcs = { abs_mul64_karatsuba, abs_mul64_ntt };
 			static const MultiplicationSelector::CplxFuncVector cplx_funcs = { mul_karatsuba_complexity, mul_ntt_complexity };
-			static const MultiplicationSelector multiplier(mul_funcs, cplx_funcs);
+			static const MultiplicationSelector					multiplier(mul_funcs, cplx_funcs);
 			return multiplier;
 		}
 
 
-		/// @brief 2^64 base long integer multiply 64bit number, add another 64bit number to product.
-		/// @param in Input long integer.
-		/// @param length Number of 64-bit blocks in the input array.
-		/// @param out Output long integer, equals to input * num_mul + num_add
-		/// @param num_add The 64 bit number to add.
-		/// @param num_mul The 64 bit number to multiply.
-		/// @details
-		/// The function performs multiplication and addition on a large integer represented by multiple 64-bit blocks:
-		/// 1. For each block of the large integer from index 0 to `length-1`:
-		///    a. Multiply the current block `in[i]` by `num_mul`.
-		///    b. Add the current value of `num_add` to the product.
-		///    c. Store the lower 64 bits of the result in `out[i]`.
-		///    d. Update `num_add` with the higher 64 bits of the product (carry-over to the next block).
-		/// 2. After processing all blocks, store the final value of `num_add` (the carry-over) in `out[length]`.
-		inline void abs_mul_add_num64(const uint64_t in[], size_t length, uint64_t out[], uint64_t num_add, uint64_t num_mul)
+		template <typename NumTy, typename ProdTy>
+		class DivSupporter
 		{
-			for (size_t i = 0; i < length; i++)
+		private:
+			NumTy divisor = 0;
+			NumTy inv = 0;
+			int	  shift = 0, shift1 = 0, shift2 = 0;
+			enum : int
 			{
-				InternalUInt128 product = InternalUInt128(in[i]) * num_mul + num_add;
-				out[i] = uint64_t(product);
-				num_add = product.high64();
+				NUM_BITS = sizeof(NumTy) * CHAR_BIT
+			};
+
+		public:
+			constexpr DivSupporter(NumTy divisor_in) : divisor(divisor_in)
+			{
+				inv = getInv(divisor, shift);
+				divisor <<= shift;
+				shift1 = shift / 2;
+				shift2 = shift - shift1;
 			}
-			out[length] = num_add;
-		}
+			// Return dividend / divisor, dividend %= divisor
+			NumTy divMod(ProdTy& dividend) const
+			{
+				dividend <<= shift;
+				NumTy r = NumTy(dividend);
+				dividend = (dividend >> NUM_BITS) * inv + dividend;
+				NumTy q1 = NumTy(dividend >> NUM_BITS) + 1;
+				r -= q1 * divisor;
+				if (r > NumTy(dividend))
+				{
+					q1--;
+					r += divisor;
+				}
+				if (r >= divisor)
+				{
+					q1++;
+					r -= divisor;
+				}
+				dividend = r >> shift;
+				return q1;
+			}
+
+			void prodDivMod(NumTy a, NumTy b, NumTy& quot, NumTy& rem) const
+			{
+				ProdTy dividend = ProdTy(a << shift1) * (b << shift2);
+				rem = NumTy(dividend);
+				dividend = (dividend >> NUM_BITS) * inv + dividend;
+				quot = NumTy(dividend >> NUM_BITS) + 1;
+				rem -= quot * divisor;
+				if (rem > NumTy(dividend))
+				{
+					quot--;
+					rem += divisor;
+				}
+				if (rem >= divisor)
+				{
+					quot++;
+					rem -= divisor;
+				}
+				rem >>= shift;
+			}
+
+			NumTy div(ProdTy dividend) const
+			{
+				return divMod(dividend);
+			}
+			NumTy mod(ProdTy dividend) const
+			{
+				divMod(dividend);
+				return dividend;
+			}
+
+			static constexpr NumTy getInv(NumTy divisor, int& leading_zero)
+			{
+				constexpr NumTy MAX = all_one<NumTy>(NUM_BITS);
+				leading_zero = hint_clz(divisor);
+				divisor <<= leading_zero;
+				ProdTy x = ProdTy(MAX - divisor) << NUM_BITS;
+				return NumTy((x + MAX) / divisor);
+			}
+		};
+
 
 		/// @brief Divides a large integer, represented as an array of 64-bit blocks, by a 64-bit divisor.
 		/// @param in Input array representing the large integer to be divided. Each element of the array is a 64-bit block of the integer.
@@ -2128,48 +2451,319 @@ namespace HyperInt
 			}
 			return remainder_high64bit;
 		}
-	} // namespace Arithmetic
+
+		template <typename T>
+		inline T divisor_normalize(T divisor[], size_t len, T base)
+		{
+			if (0 == len || nullptr == divisor)
+			{
+				return 0;
+			}
+			if (divisor[len - 1] >= base / 2)
+			{
+				return 1;
+			}
+			T first = divisor[len - 1];
+			T factor = 1;
+			while (first < base / 2)
+			{
+				factor *= 2;
+				first *= 2;
+			}
+			const DivSupporter<uint64_t, InternalUInt128> base_supporter(base);
+			uint64_t									  carry = 0;
+			for (size_t i = 0; i < len; i++)
+			{
+				InternalUInt128 temp = InternalUInt128(divisor[i]) * factor + carry;
+				carry = base_supporter.divMod(temp);
+				divisor[i] = T(temp);
+			}
+			assert(carry == 0);
+			assert(divisor[len - 1] >= base / 2);
+			return factor;
+		}
+
+		constexpr int divisor_normalize64(const uint64_t in[], size_t len, uint64_t out[])
+		{
+			constexpr uint64_t BASE_HALF = uint64_t(1) << 63;
+			if (0 == len || nullptr == in)
+			{
+				return 0;
+			}
+			if (in[len - 1] >= BASE_HALF)
+			{
+				std::copy(in, in + len, out);
+				return 0;
+			}
+			uint64_t first = in[len - 1];
+			assert(first > 0);
+			const int leading_zeros = hint_clz(first);
+			lshift_in_word_half(in, len, out, leading_zeros);
+			assert(out[len - 1] >= BASE_HALF);
+			return leading_zeros;
+		}
+
+		// 只处理商的长度为dividend_len-divisor_len的情况
+		inline void abs_div64_classic_core(uint64_t dividend[], size_t dividend_len, const uint64_t divisor[], size_t divisor_len, uint64_t quotient[], uint64_t* work_begin = nullptr, uint64_t* work_end = nullptr)
+		{
+			if (nullptr == dividend || dividend_len <= divisor_len)
+			{
+				return;
+			}
+			assert(divisor[divisor_len - 1] >= uint64_t(1) << 63);  // 除数最高位为1
+			assert(divisor_len > 0);
+			size_t pre_dividend_len = dividend_len;
+			dividend_len = remove_leading_zeros(dividend, dividend_len);	// 去除前导0
+			while (dividend_len < pre_dividend_len && dividend_len >= divisor_len)
+			{
+				size_t quot_i = dividend_len - divisor_len;
+				if (abs_compare(dividend + quot_i, divisor_len, divisor, divisor_len) >= 0)
+				{
+					quotient[quot_i] = 1;
+					abs_sub_binary(dividend + quot_i, divisor_len, divisor, divisor_len, dividend + quot_i);
+				}
+				pre_dividend_len = dividend_len;
+				dividend_len = remove_leading_zeros(dividend, dividend_len);	// 去除前导0
+			}
+			if (dividend_len < divisor_len)
+			{
+				return;
+			}
+			if (1 == divisor_len)
+			{
+				uint64_t rem = abs_div_rem_num64(dividend, dividend_len, quotient, divisor[0]);
+				dividend[0] = rem;
+				return;
+			}
+			// Get enough work memory
+			std::vector<uint64_t> work_mem;
+			const size_t		  work_size = divisor_len + 1;
+			if (work_begin + work_size > work_end)
+			{
+				work_mem.resize(work_size);
+				work_begin = work_mem.data();
+				work_end = work_begin + work_mem.size();
+			}
+			const uint64_t								  divisor_1 = divisor[divisor_len - 1];
+			const uint64_t								  divisor_0 = divisor[divisor_len - 2];
+			const DivSupporter<uint64_t, InternalUInt128> div(divisor_1);
+			size_t										  i = dividend_len - divisor_len;
+			while (i > 0)
+			{
+				i--;
+				uint64_t	   qhat = 0, rhat = 0;
+				const uint64_t dividend_2 = dividend[divisor_len + i];
+				const uint64_t dividend_1 = dividend[divisor_len + i - 1];
+				assert(dividend_2 <= divisor_1);
+				InternalUInt128 dividend_num = InternalUInt128(dividend_1, dividend_2);
+				if (dividend_2 == divisor_1)
+				{
+					qhat = UINT64_MAX;
+					rhat = uint64_t(dividend_num - InternalUInt128(divisor_1) * qhat);
+				}
+				else
+				{
+					qhat = div.divMod(dividend_num);
+					rhat = uint64_t(dividend_num);
+				}
+				{  // 3 words / 2 words refine
+					dividend_num = InternalUInt128(dividend[divisor_len + i - 2], rhat);
+					InternalUInt128 prod = InternalUInt128(divisor_0) * qhat;
+					if (prod > dividend_num)
+					{
+						qhat--;
+						prod -= divisor_0;
+						dividend_num += InternalUInt128(0, divisor_1);
+						if (dividend_num > InternalUInt128(0, divisor_1) && prod > dividend_num)
+						{
+							qhat--;
+						}
+					}
+				}
+				if (qhat > 0)
+				{
+					auto prod = work_begin;
+					auto rem = dividend + i;
+					abs_mul_add_num64(divisor, divisor_len, prod, 0, qhat);
+					size_t len_prod = remove_leading_zeros(prod, divisor_len + 1);
+					size_t len_rem = remove_leading_zeros(rem, divisor_len + 1);
+					int	   count = 0;
+					while (abs_compare(prod, len_prod, rem, len_rem) > 0)
+					{
+						qhat--;
+						abs_sub_binary(prod, len_prod, divisor, divisor_len, prod);
+						len_prod = remove_leading_zeros(prod, len_prod);
+						assert(count < 2);
+						count++;
+					}
+					if (qhat > 0)
+					{
+						abs_sub_binary(rem, len_rem, prod, len_prod, rem);
+					}
+				}
+				quotient[i] = qhat;
+			}
+		}
+		inline void abs_div64_recursive_core(uint64_t dividend[], size_t dividend_len, const uint64_t divisor[], size_t divisor_len, uint64_t quotient[], uint64_t* work_begin = nullptr, uint64_t* work_end = nullptr)
+		{
+			if (nullptr == dividend || dividend_len <= divisor_len)
+			{
+				return;
+			}
+			assert(divisor_len > 0);
+			assert(divisor[divisor_len - 1] >= uint64_t(1) << 63);  // 除数最高位为1
+			if (divisor_len <= 32 || (dividend_len <= divisor_len + 16))
+			{
+				abs_div64_classic_core(dividend, dividend_len, divisor, divisor_len, quotient, work_begin, work_end);
+				return;
+			}
+			// 被除数分段处理
+			if (dividend_len > divisor_len * 2)
+			{
+				size_t rem = dividend_len % divisor_len, shift = dividend_len - divisor_len - rem;
+				if (rem > 0)
+				{
+					abs_div64_recursive_core(dividend + shift, divisor_len + rem, divisor, divisor_len, quotient + shift, work_begin, work_end);
+				}
+				while (shift > 0)
+				{
+					shift -= divisor_len;
+					abs_div64_recursive_core(dividend + shift, divisor_len * 2, divisor, divisor_len, quotient + shift, work_begin, work_end);
+				}
+			}
+			else if (dividend_len < divisor_len * 2)
+			{
+				assert(dividend_len > divisor_len);
+				// 进行估商处理
+				size_t shift_len = divisor_len * 2 - dividend_len;	// 进行截断处理,使得截断后被除数的长度为除数的两倍,以进行估商
+				size_t next_divisor_len = divisor_len - shift_len;
+				size_t next_dividend_len = dividend_len - shift_len;
+				size_t quot_len = next_dividend_len - next_divisor_len;
+				// Get enough work memory
+				std::vector<uint64_t> work_mem;
+				const size_t		  work_size = quot_len + shift_len;
+				if (work_begin + work_size > work_end)
+				{
+					work_mem.resize(work_size * 3);
+					work_begin = work_mem.data();
+					work_end = work_begin + work_mem.size();
+				}
+				auto prod = work_begin;
+				abs_div64_recursive_core(dividend + shift_len, next_dividend_len, divisor + shift_len, next_divisor_len, quotient, work_begin, work_end);
+				abs_mul64(divisor, shift_len, quotient, quot_len, prod, work_begin + work_size, work_end);
+				size_t prod_len = remove_leading_zeros(prod, quot_len + shift_len), rem_len = remove_leading_zeros(dividend, divisor_len);
+				// 修正
+				int count = 0;
+				while (abs_compare(prod, prod_len, dividend, rem_len) > 0)
+				{
+					abs_sub_num_binary(quotient, quot_len, uint64_t(1), quotient);
+					abs_sub_binary(prod, prod_len, divisor, shift_len, prod);
+					bool carry = abs_add_binary_half(dividend + shift_len, rem_len - shift_len, divisor + shift_len, quot_len, dividend + shift_len);
+					if (carry)
+					{
+						if (rem_len < dividend_len)  // 防止溢出
+						{
+							dividend[rem_len] = 1;
+							rem_len++;
+						}
+						else
+						{
+							// 说明此时rem_len = dividend_len + 1
+							// prod_len <= quot_len + shift_len = dividend_len - divisor_len + divisor_len * 2 - dividend_len = divisor_len <= dividend_len
+							// 故此时prod_len < rem_len
+							break;
+						}
+					}
+					rem_len = remove_leading_zeros(dividend, rem_len);
+					prod_len = remove_leading_zeros(prod, prod_len);
+					assert(count < 2);
+					count++;
+				}
+				abs_sub_binary(dividend, rem_len, prod, prod_len, dividend);
+			}
+			else
+			{
+				// 进行两次递归处理
+				size_t quot_lo_len = divisor_len / 2, quot_hi_len = divisor_len - quot_lo_len;
+				size_t dividend_len1 = divisor_len + quot_hi_len, dividend_len2 = divisor_len + quot_lo_len;
+				abs_div64_recursive_core(dividend + quot_lo_len, dividend_len1, divisor, divisor_len, quotient + quot_lo_len, work_begin, work_end);	// 求出高位的商
+				abs_div64_recursive_core(dividend, dividend_len2, divisor, divisor_len, quotient, work_begin, work_end);								// 求出低位的商
+			}
+		}
+		inline void abs_div64(uint64_t dividend[], size_t dividend_len, const uint64_t divisor[], size_t divisor_len, uint64_t quotient[])
+		{
+			std::fill_n(quotient, get_div_len(dividend_len, divisor_len), uint64_t(0));
+			dividend_len = remove_leading_zeros(dividend, dividend_len);
+			divisor_len = remove_leading_zeros(divisor, divisor_len);
+
+			size_t				  norm_dividend_len = dividend_len + 1, norm_divisor_len = divisor_len;
+			std::vector<uint64_t> dividend_v(norm_dividend_len), divisor_v(norm_divisor_len);
+
+			auto norm_dividend = dividend_v.data(), norm_divisor = divisor_v.data();
+
+			int	 leading_zero = divisor_normalize64(divisor, divisor_len, norm_divisor);
+			lshift_in_word(dividend, dividend_len, norm_dividend, leading_zero);
+			norm_dividend_len = remove_leading_zeros(norm_dividend, norm_dividend_len);
+			// 解决商最高位为1的情况
+			if (norm_dividend_len == dividend_len)
+			{
+				size_t quot_len = norm_dividend_len - norm_divisor_len;
+				if (abs_compare(norm_dividend + quot_len, norm_divisor_len, norm_divisor, norm_divisor_len) >= 0)
+				{
+					quotient[quot_len] = 1;
+					abs_sub_binary(norm_dividend + quot_len, norm_divisor_len, norm_divisor, norm_divisor_len, norm_dividend + quot_len);
+				}
+			}
+			// 剩余的商长度为quot_len
+			abs_div64_recursive_core(norm_dividend, norm_dividend_len, norm_divisor, norm_divisor_len, quotient);
+
+			norm_divisor_len = remove_leading_zeros(norm_dividend, norm_divisor_len);  // 余数在被除数上
+			rshift_in_word(norm_dividend, norm_divisor_len, dividend, leading_zero);
+			std::fill(dividend + norm_divisor_len, dividend + dividend_len, uint64_t(0));
+		}
+
+	}  // namespace Arithmetic
 
 	namespace Factorial
 	{
 		using TwilightDream::BigInteger::BigInteger;
 
 		// Compute the prime factorization table for (n!)
-		inline std::vector<std::pair<size_t, size_t>> get_prime_factors( size_t n )
+		inline std::vector<std::pair<size_t, size_t>> get_prime_factors(size_t n)
 		{
 			std::vector<std::pair<size_t, size_t>> factors;
-			std::vector<uint8_t>				   is_prime( n + 1, true );
+			std::vector<uint8_t>				   is_prime(n + 1, true);
 
-			for ( size_t i = 2; i <= n; ++i )
+			for (size_t i = 2; i <= n; ++i)
 			{
-				if ( is_prime[ i ] )
+				if (is_prime[i])
 				{
 					size_t count = 0;
-					for ( size_t j = i; j <= n; j += i )
+					for (size_t j = i; j <= n; j += i)
 					{
-						is_prime[ j ] = false;
+						is_prime[j] = false;
 					}
-					for ( size_t j = i; j <= n; j *= i )
+					for (size_t j = i; j <= n; j *= i)
 					{
 						count += n / j;
 					}
-					factors.emplace_back( i, count );
+					factors.emplace_back(i, count);
 				}
 			}
 			return factors;
 		}
 
 		// Recursively calculate the product of odd powers
-		BigInteger calculate_odd_product( std::vector<std::pair<size_t, size_t>>::iterator beg, std::vector<std::pair<size_t, size_t>>::iterator end )
+		BigInteger calculate_odd_product(std::vector<std::pair<size_t, size_t>>::iterator beg, std::vector<std::pair<size_t, size_t>>::iterator end)
 		{
-			if ( beg == end )
+			if (beg == end)
 				return 1;
-			if ( beg + 1 == end )
+			if (beg + 1 == end)
 			{
-				if ( beg->second % 2 == 1 )
+				if (beg->second % 2 == 1)
 				{
 					beg->second /= 2;
-					return BigInteger( beg->first );
+					return BigInteger(beg->first);
 				}
 				else
 				{
@@ -2178,27 +2772,27 @@ namespace HyperInt
 				}
 			}
 
-			auto mid = beg + ( end - beg ) / 2;
-			return calculate_odd_product( beg, mid ) * calculate_odd_product( mid, end );
+			auto mid = beg + (end - beg) / 2;
+			return calculate_odd_product(beg, mid) * calculate_odd_product(mid, end);
 		}
 
 		// Recursively calculate the value of (n!)
-		BigInteger calculate_factorial( std::vector<std::pair<size_t, size_t>>& factors )
+		BigInteger calculate_factorial(std::vector<std::pair<size_t, size_t>>& factors)
 		{
 			BigInteger result = 1;
-			if ( !factors.empty() )
+			if (!factors.empty())
 			{
-				result = calculate_odd_product( factors.begin(), factors.end() );
-				while ( !factors.empty() && factors.back().second == 0 )
+				result = calculate_odd_product(factors.begin(), factors.end());
+				while (!factors.empty() && factors.back().second == 0)
 				{
 					factors.pop_back();
 				}
-				BigInteger sub_result = calculate_factorial( factors );
+				BigInteger sub_result = calculate_factorial(factors);
 				result *= sub_result * sub_result;
 			}
 			return result;
 		}
-	}
+	}  // namespace Factorial
 
-} // namespace HyperInt
+}  // namespace HyperInt
 #endif

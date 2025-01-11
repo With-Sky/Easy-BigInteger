@@ -295,27 +295,71 @@ namespace TwilightDream::BigInteger
 		return quotient;
 	}
 
-	//Return *this / divisor
-	BigInteger BigInteger::DivideModulo( const BigInteger& divisor, BigInteger& remainder ) const
+	BigInteger BigInteger::DivideModuloDivideConquer(const BigInteger& divisor, BigInteger& remainder) const
 	{
-		if ( divisor.IsZero() )
+		if (divisor.IsZero())
 		{
-			throw std::overflow_error( "Divide by zero" );
+			throw std::overflow_error("Divide by zero");
 		}
-		if ( this == &divisor )
+		if (this == &divisor)
 		{
 			remainder.values.clear();
-			return BigInteger { 1 };
+			return BigInteger{ 1 };
 		}
+		if (*this < divisor)
+		{
+			remainder = *this;
+			return BigInteger{ 0 };
+		}
+		size_t	   dividend_len = Size();
+		size_t	   divisor_len = divisor.Size();
 		BigInteger result;
-		if ( divisor.Size() == 1 )
+		if (divisor.Size() == 1)
 		{
 			result = *this;
-			remainder = result.DividModuloNumber( divisor.values[ 0 ] );
+			remainder = result.DividModuloNumber(divisor.values[0]);
 		}
 		else
 		{
-			result = this->DivideModuloNewtonIteration( divisor, remainder );
+			result.values.resize(dividend_len - divisor_len + 1);
+			remainder = *this;
+			HyperInt::Arithmetic::abs_div64(remainder.values.data(), dividend_len, divisor.values.data(), divisor_len, result.values.data());
+		}
+		result.Clean();
+		remainder.Clean();
+		return result;
+	}
+
+	//Return *this / divisor
+	BigInteger BigInteger::DivideModulo(const BigInteger& divisor, BigInteger& remainder) const
+	{
+		if (divisor.IsZero())
+		{
+			throw std::overflow_error("Divide by zero");
+		}
+		if (this == &divisor)
+		{
+			remainder.values.clear();
+			return BigInteger{ 1 };
+		}
+		if (*this < divisor)
+		{
+			remainder = *this;
+			return BigInteger{ 0 };
+		}
+		BigInteger result;
+		if (divisor.Size() == 1)
+		{
+			result = *this;
+			remainder = result.DividModuloNumber(divisor.values[0]);
+		}
+		else if (divisor.Size() <= 8192)
+		{
+			result = this->DivideModuloDivideConquer(divisor, remainder);
+		}
+		else
+		{
+			result = this->DivideModuloNewtonIteration(divisor, remainder);
 		}
 		result.Clean();
 		remainder.Clean();
@@ -354,7 +398,7 @@ namespace TwilightDream::BigInteger
 			return *this;
 		}
 		BigInteger r;
-		*this = DivideModuloNewtonIteration( other, r );
+		*this = DivideModulo( other, r );
 		return *this;
 	}
 
@@ -371,7 +415,7 @@ namespace TwilightDream::BigInteger
 			return *this = remainder;
 		}
 		BigInteger r;
-		DivideModuloNewtonIteration( other, r );
+		DivideModulo( other, r );
 		return *this = r;
 	}
 
@@ -503,12 +547,12 @@ namespace TwilightDream::BigInteger
 		}
 
 		BigInteger x0 = *this;
-		BigInteger x1 = ( 2 * x0 + ( *this / ( x0 * x0 ) ) ) / 3;
+		BigInteger x1 = (x0 * 2 + (*this / (x0 * x0))) / 3;
 
 		while ( x1 < x0 )
 		{
 			x0 = x1;
-			x1 = ( 2 * x0 + ( *this / ( x0 * x0 ) ) ) / 3;
+			x1 = (x0 * 2 + (*this / (x0 * x0))) / 3;
 		}
 
 		values = std::move( x0.values );

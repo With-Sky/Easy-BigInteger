@@ -1239,7 +1239,7 @@ namespace TwilightDream::BigFraction
 			// Convert the fraction to a long double for root calculation.
 			long double value = static_cast<long double>(*this);
 			// Compute the nth root using standard library pow function.
-			long double floating_result = std::pow(value, long double(1.0) / n.ToUnsignedInt());
+			long double floating_result = std::pow(value, static_cast<long double>(1.0) / n.ToUnsignedInt());
 			// Convert the floating-point result back to BigFraction.
 			BigFraction result = this->FromFloatingNumber<long double>(floating_result);
 			result.PrecisionMode = this->PrecisionMode;

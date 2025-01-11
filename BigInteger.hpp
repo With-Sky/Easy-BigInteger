@@ -259,6 +259,8 @@ namespace TwilightDream::BigInteger
 		*/
 		BigInteger DivideModuloNewtonIteration( const BigInteger& divisor, BigInteger& remainder ) const;
 
+		BigInteger DivideModuloDivideConquer(const BigInteger& divisor, BigInteger& remainder) const;
+
 		BigInteger DivideModulo( const BigInteger& divisor, BigInteger& remainder ) const;
 
 		BigInteger& operator*=( const BigInteger& other );
